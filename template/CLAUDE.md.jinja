@@ -1,0 +1,10 @@
+# Claude Instructions
+
+- Use `uv sync` to install dependencies and `uv run` for all project commands.
+- Organize code using the existing layering: `api` (models, schemas, services), `core` (config, logging, telemetry), `database` (session, queues, repositories), and `routes`.
+- Do not bypass dependency injection; extend the `ServiceContainer` in `bootstrap.py` instead.
+- Add or update scopes through `Settings.scopes` and `ScopeRegistry`.
+- Keep request handlers non-blocking and move long-running work to the configured queue backend.
+- Maintain Google-style docstrings with explicit types.
+- Keep tracing enabled through `core/telemetry.py` and trace-aware logging through `core/logging.py`.
+- Refresh `.claude/skills` and `.agents/skills` with `uv run library-skills --tool-skill install --claude --yes --all` after dependency changes.

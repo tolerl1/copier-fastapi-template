@@ -1,0 +1,58 @@
+"""Regression tests guarding against circular-import regressions.
+
+api/__init__.py must stay free of re-exports (see the warning comment
+there): dependencies imports {{ package_name }}.bootstrap.ServiceContainer
+at module scope, and bootstrap imports {{ package_name }}.api.models, which
+requires the api package's __init__ to finish first. These tests import in a
+fresh subprocess so the check isn't masked by modules already cached in
+sys.modules from other tests in the same pytest session.
+"""
+
+from __future__ import annotations
+
+import subprocess
+import sys
+
+
+def test_dependencies_importable_before_bootstrap() -> None:
+    """Verifies importing api.dependencies before bootstrap doesn't cycle.
+
+    Returns:
+        None: Assertions validate a clean subprocess import.
+    """
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "import {{ package_name }}.api.dependencies\n"
+            "import {{ package_name }}.bootstrap\n",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_bootstrap_importable_before_dependencies() -> None:
+    """Verifies importing bootstrap before api.dependencies doesn't cycle.
+
+    Returns:
+        None: Assertions validate a clean subprocess import.
+    """
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "import {{ package_name }}.bootstrap\n"
+            "import {{ package_name }}.api.dependencies\n",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr

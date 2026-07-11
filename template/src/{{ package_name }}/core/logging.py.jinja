@@ -1,0 +1,68 @@
+"""Logging helpers with trace-aware and correlation ID formatting."""
+
+from __future__ import annotations
+
+import logging
+from typing import override
+
+from opentelemetry import trace
+
+from {{ package_name }}.core.correlation import get_correlation_id
+
+TRACE_LEVEL = 5
+logging.addLevelName(TRACE_LEVEL, "TRACE")
+
+
+class TraceContextFormatter(logging.Formatter):
+    """Injects OpenTelemetry trace identifiers and correlation ID into log records.
+
+    Attributes:
+        default_msec_format (str): Millisecond timestamp rendering pattern.
+    """
+
+    default_msec_format = "%s.%03d"
+
+    @override
+    def format(self, record: logging.LogRecord) -> str:
+        """Formats a log record with trace context and correlation ID.
+
+        Args:
+            record (logging.LogRecord): Log record to format.
+
+        Returns:
+            str: Formatted log line.
+        """
+
+        span_context = trace.get_current_span().get_span_context()
+        record.trace_id = (
+            format(span_context.trace_id, "032x") if span_context.is_valid else "-"
+        )
+        record.span_id = (
+            format(span_context.span_id, "016x") if span_context.is_valid else "-"
+        )
+        record.correlation_id = get_correlation_id()
+        return super().format(record)
+
+
+def configure_logging(level: str) -> None:
+    """Configures process logging.
+
+    Args:
+        level (str): Logging level name.
+
+    Returns:
+        None: Logging is configured in-place.
+    """
+
+    resolved_level = TRACE_LEVEL if level.upper() == "TRACE" else level.upper()
+    handler = logging.StreamHandler()
+    handler.setFormatter(
+        TraceContextFormatter(
+            fmt=(
+                "%(asctime)s %(levelname)s "
+                "[correlation_id=%(correlation_id)s trace_id=%(trace_id)s "
+                "span_id=%(span_id)s] %(name)s - %(message)s"
+            )
+        )
+    )
+    logging.basicConfig(level=resolved_level, handlers=[handler], force=True)

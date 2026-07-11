@@ -1,0 +1,76 @@
+"""Application settings for {{ project_name }}."""
+
+from __future__ import annotations
+
+from typing import Literal
+
+from pydantic import BaseModel, Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class ScopeSettings(BaseModel):
+    """Configures a DDD scope.
+
+    Attributes:
+        name (str): Stable scope name used by routes and queued tasks.
+        description (str): Human-readable scope summary.
+    """
+
+    name: str
+    description: str
+
+
+class Settings(BaseSettings):
+    """Stores runtime settings for the application.
+
+    Attributes:
+        app_name (str): FastAPI application name.
+        environment (str): Deployment environment label.
+        host (str): Interface Uvicorn binds to when run via `serve()`.
+        port (int): Port Uvicorn binds to when run via `serve()`.
+        database_url (str): Async SQLAlchemy connection string using asyncpg.
+        log_level (str): Root logging level, including TRACE support.
+        telemetry_enabled (bool): Enables OpenTelemetry instrumentation.
+        otlp_endpoint (str | None): Optional OTLP HTTP endpoint.
+        queue_backend (
+            Literal["memory", "redis", "azure_storage_queue"]
+        ): Queue backend.
+        queue_name (str): Queue name for long-running tasks.
+        redis_url (str): Redis connection string.
+        azure_storage_queue_connection_string (
+            str | None
+        ): Azure queue connection string.
+        scopes (list[ScopeSettings]): Bounded contexts exposed by the application.
+    """
+
+    model_config = SettingsConfigDict(
+        env_prefix="{{ env_prefix }}",
+        env_file=".env",
+        env_nested_delimiter="__",
+        extra="ignore",
+    )
+
+    app_name: str = "{{ project_name }}"
+    environment: str = "development"
+    host: str = "0.0.0.0"
+    port: int = 8000
+    database_url: str = "postgresql+asyncpg:///{{ package_name }}"
+    log_level: str = "TRACE"
+    telemetry_enabled: bool = True
+    otlp_endpoint: str | None = None
+    queue_backend: Literal["memory", "redis", "azure_storage_queue"] = "memory"
+    queue_name: str = "long-running-tasks"
+    redis_url: str = "redis://localhost:6379/0"
+    azure_storage_queue_connection_string: str | None = None
+    scopes: list[ScopeSettings] = Field(
+        default_factory=lambda: [
+            ScopeSettings(
+                name="platform",
+                description="Cross-cutting platform capabilities and health endpoints.",
+            ),
+            ScopeSettings(
+                name="workflows",
+                description="Long-running workflow orchestration and task handoff.",
+            ),
+        ]
+    )

@@ -1,0 +1,45 @@
+"""OpenTelemetry bootstrap helpers."""
+
+from __future__ import annotations
+
+from fastapi import FastAPI
+from opentelemetry import trace
+from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+from opentelemetry.sdk.resources import DEPLOYMENT_ENVIRONMENT, SERVICE_NAME, Resource
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter
+
+from {{ package_name }}.core.config import Settings
+
+
+def configure_telemetry(app: FastAPI, settings: Settings) -> None:
+    """Enables OpenTelemetry tracing for the FastAPI application.
+
+    Args:
+        app (FastAPI): Application instance to instrument.
+        settings (Settings): Runtime settings.
+
+    Returns:
+        None: Instrumentation is applied in-place.
+    """
+
+    if not settings.telemetry_enabled:
+        return
+
+    provider = TracerProvider(
+        resource=Resource.create(
+            {
+                SERVICE_NAME: settings.app_name,
+                DEPLOYMENT_ENVIRONMENT: settings.environment,
+            }
+        )
+    )
+    exporter = (
+        OTLPSpanExporter(endpoint=settings.otlp_endpoint)
+        if settings.otlp_endpoint
+        else ConsoleSpanExporter()
+    )
+    provider.add_span_processor(BatchSpanProcessor(exporter))
+    trace.set_tracer_provider(provider)
+    FastAPIInstrumentor.instrument_app(app, tracer_provider=provider)

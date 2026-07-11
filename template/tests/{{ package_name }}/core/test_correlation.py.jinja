@@ -1,0 +1,94 @@
+"""Tests for correlation ID functionality."""
+
+from __future__ import annotations
+
+import uuid
+
+import aiohttp
+import pytest
+
+from {{ package_name }}.core.correlation import get_correlation_id, set_correlation_id
+
+
+def test_correlation_id_context_variable() -> None:
+    """Verifies correlation ID can be set and retrieved from context.
+
+    Returns:
+        None: Assertions validate context variable behavior.
+    """
+
+    test_id = "test-correlation-123"
+    set_correlation_id(test_id)
+    try:
+        assert get_correlation_id() == test_id
+    finally:
+        set_correlation_id("-")
+
+
+@pytest.mark.asyncio
+async def test_correlation_id_in_health_response(client: aiohttp.ClientSession) -> None:
+    """Verifies correlation ID is generated and included in response headers.
+
+    Args:
+        client: Async test client.
+
+    Returns:
+        None: Assertions validate response headers.
+    """
+
+    async with client.get("/health") as response:
+        assert response.status == 200
+        correlation_id = response.headers.get("x-correlation-id")
+        assert correlation_id is not None
+        assert str(uuid.UUID(correlation_id)) == correlation_id
+
+
+@pytest.mark.asyncio
+async def test_correlation_id_auto_generated(client: aiohttp.ClientSession) -> None:
+    """Verifies correlation ID is auto-generated if not provided.
+
+    Args:
+        client: Async test client.
+
+    Returns:
+        None: Assertions validate correlation ID generation.
+    """
+
+    async with client.get("/health") as first_response:
+        assert first_response.status == 200
+        first_correlation_id = first_response.headers.get("x-correlation-id")
+        assert first_correlation_id is not None
+        assert str(uuid.UUID(first_correlation_id)) == first_correlation_id
+
+    async with client.get("/health") as second_response:
+        assert second_response.status == 200
+        second_correlation_id = second_response.headers.get("x-correlation-id")
+        assert second_correlation_id is not None
+        assert str(uuid.UUID(second_correlation_id)) == second_correlation_id
+
+    assert first_correlation_id != second_correlation_id
+
+
+@pytest.mark.asyncio
+async def test_correlation_id_ignores_request_headers(
+    client: aiohttp.ClientSession,
+) -> None:
+    """Verifies caller-provided request IDs do not control the correlation ID.
+
+    Args:
+        client: Async test client.
+
+    Returns:
+        None: Assertions validate caller-supplied headers are ignored.
+    """
+
+    test_id = "request-456"
+    async with client.get(
+        "/health",
+        headers={"x-correlation-id": "request-123", "x-request-id": test_id},
+    ) as response:
+        assert response.status == 200
+        correlation_id = response.headers.get("x-correlation-id")
+        assert correlation_id is not None
+        assert correlation_id not in {"request-123", test_id}
+        assert str(uuid.UUID(correlation_id)) == correlation_id

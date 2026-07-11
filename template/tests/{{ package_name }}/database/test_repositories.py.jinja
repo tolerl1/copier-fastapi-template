@@ -1,0 +1,56 @@
+"""Integration tests for SQLAlchemy repositories against a real Postgres database."""
+
+from __future__ import annotations
+
+import pytest
+from tests.conftest import TEST_DATABASE_URL
+
+from {{ package_name }}.database.repositories import SqlAlchemyItemRepository
+from {{ package_name }}.database.session import DatabaseSessionManager
+
+
+@pytest.mark.asyncio
+async def test_item_repository_lists_seeded_items() -> None:
+    """Verifies the item repository reads the migration-seeded rows.
+
+    Returns:
+        None: Assertions validate repository behavior against real Postgres.
+    """
+
+    session_manager = DatabaseSessionManager(TEST_DATABASE_URL)
+    repository = SqlAlchemyItemRepository()
+
+    async with session_manager.session() as session:
+        items = await repository.list_items(session, offset=0, limit=20)
+        total = await repository.count_items(session)
+
+    assert [item.name for item in items] == [
+        "Example Item 1",
+        "Example Item 2",
+        "Example Item 3",
+    ]
+    assert total == 3
+    await session_manager.dispose()
+
+
+@pytest.mark.asyncio
+async def test_item_repository_honors_offset_and_limit() -> None:
+    """Verifies the item repository paginates at the SQL level.
+
+    Returns:
+        None: Assertions validate offset/limit behavior against real Postgres.
+    """
+
+    session_manager = DatabaseSessionManager(TEST_DATABASE_URL)
+    repository = SqlAlchemyItemRepository()
+
+    async with session_manager.session() as session:
+        first_page = await repository.list_items(session, offset=0, limit=2)
+        second_page = await repository.list_items(session, offset=2, limit=2)
+
+    assert [item.name for item in first_page] == [
+        "Example Item 1",
+        "Example Item 2",
+    ]
+    assert [item.name for item in second_page] == ["Example Item 3"]
+    await session_manager.dispose()

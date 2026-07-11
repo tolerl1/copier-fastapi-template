@@ -1,0 +1,71 @@
+"""Tests for the example /items endpoint and item service wiring."""
+
+from __future__ import annotations
+
+import pytest
+
+from {{ package_name }}.api.dependencies import get_item_service
+from {{ package_name }}.api.services import ItemService
+from {{ package_name }}.bootstrap import build_container
+from {{ package_name }}.core.config import Settings
+
+
+@pytest.mark.asyncio
+async def test_items_endpoint_returns_example_items(client) -> None:
+    """Verifies the items endpoint.
+
+    Args:
+        client: Async test client.
+
+    Returns:
+        None: Assertions validate the endpoint response.
+    """
+
+    async with client.get("/items") as response:
+        payload = await response.json()
+
+        assert response.status == 200
+        assert payload["page_size"] == 20
+        assert len(payload["items"]) == 3
+        assert [item["name"] for item in payload["items"]] == [
+            "Example Item 1",
+            "Example Item 2",
+            "Example Item 3",
+        ]
+
+
+@pytest.mark.asyncio
+async def test_items_endpoint_enforces_pagination_maximum(client) -> None:
+    """Verifies the items endpoint enforces the page-size cap.
+
+    Args:
+        client: Async test client.
+
+    Returns:
+        None: Assertions validate pagination.
+    """
+
+    async with client.get("/items?page_size=101") as response:
+        assert response.status == 422
+
+
+@pytest.mark.asyncio
+async def test_get_item_service_returns_container_owned_service() -> None:
+    """Verifies the item dependency returns the container-managed service.
+
+    Returns:
+        None: Assertions validate dependency injection behavior.
+    """
+
+    container = build_container(
+        Settings(
+            telemetry_enabled=False,
+            queue_backend="memory",
+        )
+    )
+
+    service = get_item_service(container)
+
+    assert isinstance(service, ItemService)
+    assert service is container.item_service
+    await container.shutdown()

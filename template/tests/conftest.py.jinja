@@ -1,0 +1,112 @@
+"""Shared test fixtures."""
+
+from __future__ import annotations
+
+import asyncio
+import os
+import socket
+from collections.abc import AsyncIterator, Iterator
+from pathlib import Path
+
+import aiohttp
+import pytest
+import pytest_asyncio
+import uvicorn
+from alembic import command
+from alembic.config import Config as AlembicConfig
+from fastapi import FastAPI
+
+from {{ package_name }}.core.config import ScopeSettings, Settings
+from {{ package_name }}.main import create_app
+
+_REPO_ROOT = Path(__file__).resolve().parent.parent
+
+TEST_DATABASE_URL = os.environ.get(
+    "{{ env_prefix }}TEST_DATABASE_URL",
+    "postgresql+asyncpg://{{ package_name }}:{{ package_name }}@localhost:5432/{{ package_name }}_test",
+)
+TEST_REDIS_URL = os.environ.get(
+    "{{ env_prefix }}TEST_REDIS_URL", "redis://localhost:6379/1"
+)
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _migrated_database() -> Iterator[None]:
+    """Applies Alembic migrations to the real test Postgres database once per session.
+
+    Returns:
+        Iterator[None]: Yields after migrations are applied at HEAD.
+    """
+
+    os.environ["{{ env_prefix }}DATABASE_URL"] = TEST_DATABASE_URL
+    config = AlembicConfig(str(_REPO_ROOT / "alembic.ini"))
+    command.upgrade(config, "head")
+    yield
+
+
+def find_free_port() -> int:
+    """Finds an available localhost port.
+
+    Returns:
+        int: Available TCP port.
+    """
+
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        return int(sock.getsockname()[1])
+
+
+@pytest_asyncio.fixture
+async def app() -> AsyncIterator[FastAPI]:
+    """Creates a test application.
+
+    Returns:
+        AsyncIterator: Test FastAPI application.
+    """
+
+    settings = Settings(
+        telemetry_enabled=False,
+        queue_backend="memory",
+        database_url=TEST_DATABASE_URL,
+        scopes=[
+            ScopeSettings(name="platform", description="Platform services."),
+            ScopeSettings(name="billing", description="Billing workflows."),
+        ],
+    )
+    test_app = create_app(settings)
+    yield test_app
+    await test_app.state.container.shutdown()
+
+
+@pytest_asyncio.fixture
+async def client(app: FastAPI) -> AsyncIterator[aiohttp.ClientSession]:
+    """Creates an async API client.
+
+    Args:
+        app (FastAPI): Test FastAPI application.
+
+    Returns:
+        AsyncIterator[aiohttp.ClientSession]: HTTP client for the test server.
+    """
+
+    port = find_free_port()
+    server = uvicorn.Server(
+        uvicorn.Config(app=app, host="127.0.0.1", port=port, log_level="warning")
+    )
+    server_task = asyncio.create_task(server.serve())
+
+    for _ in range(200):
+        if server.started:
+            break
+        await asyncio.sleep(0.01)
+    else:
+        msg = "Uvicorn test server did not start."
+        raise RuntimeError(msg)
+
+    async with aiohttp.ClientSession(
+        base_url=f"http://127.0.0.1:{port}",
+    ) as client_session:
+        yield client_session
+
+    server.should_exit = True
+    await server_task

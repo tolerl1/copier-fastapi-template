@@ -1,0 +1,10 @@
+# Agent Guidelines
+
+- Package management: `uv`
+- Hooks: `prek install -t pre-commit -t commit-msg -t pre-push` then `prek run --all-files`
+- Skill sync: `uv run library-skills --tool-skill install --claude --yes --all`
+- Linting: `uv run ruff check .` and `uv run ruff format .`
+- Type checking: `uv run ty check`
+- Tests: `uv run pytest`
+- Migrations: `uv run alembic upgrade head`
+- Architecture: Configurable scopes with dependency injection, async SQLAlchemy, queue handoff, and OpenTelemetry

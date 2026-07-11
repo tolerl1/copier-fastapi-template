@@ -1,0 +1,113 @@
+"""FastAPI router definitions."""
+
+from __future__ import annotations
+
+{% if include_example_endpoint %}
+from typing import Annotated
+
+from fastapi import APIRouter, Query
+{% else %}
+from fastapi import APIRouter
+{% endif %}
+
+from {{ package_name }}.api.dependencies import (
+{% if include_example_endpoint %}
+    DbSessionDep,
+{% endif %}
+    HealthServiceDep,
+{% if include_example_endpoint %}
+    ItemServiceDep,
+{% endif %}
+    TaskDispatcherDep,
+    raise_unknown_scope,
+)
+from {{ package_name }}.api.models import UnknownScopeError
+from {{ package_name }}.api.schemas import (
+    DispatchTaskRequest,
+    DispatchTaskResponse,
+    HealthDTO,
+{% if include_example_endpoint %}
+    PaginatedItemsDTO,
+{% endif %}
+)
+
+system_router = APIRouter(tags=["system"])
+{% if include_example_endpoint %}
+items_router = APIRouter(prefix="/items", tags=["examples"])
+{% endif %}
+tasks_router = APIRouter(prefix="/tasks", tags=["tasks"])
+
+
+@system_router.get("/health")
+async def health_check(health_service: HealthServiceDep) -> HealthDTO:
+    """Returns the application health status.
+
+    Args:
+        health_service (HealthService): Injected health service.
+
+    Returns:
+        HealthDTO: Current health snapshot.
+    """
+
+    return await health_service.read()
+
+{% if include_example_endpoint %}
+
+@items_router.get("")
+async def list_items(
+    item_service: ItemServiceDep,
+    session: DbSessionDep,
+    page: Annotated[int, Query(ge=1)] = 1,
+    page_size: Annotated[int, Query(ge=1, le=100)] = 20,
+) -> PaginatedItemsDTO:
+    """Lists example items.
+
+    This endpoint demonstrates how to back a GET endpoint with pagination and a
+    request-scoped database session. Replace this with your own domain logic.
+
+    Args:
+        item_service (ItemService): Injected item service.
+        session (AsyncSession): Injected request-scoped database session.
+        page (int): One-based page number.
+        page_size (int): Page size with a maximum of 100.
+
+    Returns:
+        PaginatedItemsDTO: Paginated items.
+    """
+
+    return await item_service.page(session, page=page, page_size=page_size)
+{% endif %}
+
+
+@tasks_router.post("/dispatch", status_code=202)
+async def dispatch_task(
+    request: DispatchTaskRequest,
+    dispatcher: TaskDispatcherDep,
+) -> DispatchTaskResponse:
+    """Dispatches a long-running task.
+
+    Args:
+        request (DispatchTaskRequest): Task request body.
+        dispatcher (TaskDispatcher): Injected task dispatcher.
+
+    Returns:
+        DispatchTaskResponse: Queued task response.
+
+    Raises:
+        HTTPException: If the scope is unknown.
+    """
+
+    try:
+        return await dispatcher.dispatch(request)
+    except UnknownScopeError as error:
+        raise raise_unknown_scope(error) from error
+
+
+router = APIRouter()
+router.include_router(system_router)
+{% if include_example_endpoint %}
+router.include_router(items_router)
+{% endif %}
+router.include_router(tasks_router)
+
+__all__ = ["router"]

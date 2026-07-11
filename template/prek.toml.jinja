@@ -1,0 +1,47 @@
+minimum_prek_version = "0.4.8"
+default_language_version.python = "{{ python_version }}"
+
+[[repos]]
+repo = "https://github.com/pre-commit/pre-commit-hooks"
+rev = "v5.0.0"
+hooks = [
+  { id = "trailing-whitespace" },
+  { id = "end-of-file-fixer" },
+]
+
+[[repos]]
+repo = "https://github.com/astral-sh/ruff-pre-commit"
+rev = "v0.15.0"
+hooks = [
+  { id = "ruff-check", args = ["--fix", "--exit-non-zero-on-fix"] },
+  { id = "ruff-format" },
+]
+
+[[repos]]
+repo = "https://github.com/asottile/pyupgrade"
+rev = "v3.20.0"
+hooks = [{ id = "pyupgrade", args = ["--py{{ python_version.replace('.', '') }}-plus"] }]
+
+[[repos]]
+repo = "https://github.com/commitizen-tools/commitizen"
+rev = "v4.16.3"
+hooks = [{ id = "commitizen", stages = ["commit-msg"] }]
+
+[[repos]]
+repo = "local"
+
+[[repos.hooks]]
+id = "ty-check"
+name = "ty-check"
+entry = "uv run ty check"
+language = "system"
+pass_filenames = false
+files = "^(src|tests)/"
+
+[[repos.hooks]]
+id = "pytest"
+name = "pytest"
+entry = "uv run pytest"
+language = "system"
+pass_filenames = false
+stages = ["pre-push"]

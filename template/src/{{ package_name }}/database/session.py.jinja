@@ -1,0 +1,88 @@
+"""Async SQLAlchemy session management."""
+
+from __future__ import annotations
+
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+
+
+class Base(DeclarativeBase):
+    """Declarative base for ORM models."""
+
+{% if include_example_endpoint %}
+
+class ItemModel(Base):
+    """Persists example items for the `/items` endpoint.
+
+    Attributes:
+        id (int): Database primary key.
+        name (str): Item name.
+        description (str): Item description.
+    """
+
+    __tablename__ = "items"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    name: Mapped[str]
+    description: Mapped[str]
+{% endif %}
+
+
+class DatabaseSessionManager:
+    """Creates async SQLAlchemy sessions.
+
+    Attributes:
+        _engine (AsyncEngine): Shared async engine.
+        _session_factory (async_sessionmaker[AsyncSession]): Session factory.
+    """
+
+    def __init__(self, database_url: str) -> None:
+        """Creates the session manager.
+
+        Args:
+            database_url (str): Async database URL.
+
+        Returns:
+            None: The manager is initialized in-place.
+        """
+
+        self._engine = create_async_engine(database_url, pool_pre_ping=True)
+        self._session_factory = async_sessionmaker(self._engine, expire_on_commit=False)
+
+    @property
+    def engine(self) -> AsyncEngine:
+        """Returns the shared engine.
+
+        Returns:
+            AsyncEngine: Shared async engine.
+        """
+
+        return self._engine
+
+    @asynccontextmanager
+    async def session(self) -> AsyncIterator[AsyncSession]:
+        """Creates an async session.
+
+        Returns:
+            AsyncIterator[AsyncSession]: Managed async session.
+        """
+
+        async with self._session_factory() as session:
+            yield session
+
+    async def dispose(self) -> None:
+        """Disposes the shared engine.
+
+        Returns:
+            None: Engine resources are released in-place.
+        """
+
+        await self._engine.dispose()

@@ -1,0 +1,40 @@
+"""Tests for scope registration."""
+
+from __future__ import annotations
+
+import pytest
+
+from {{ package_name }}.api.models import ScopeDefinition, ScopeRegistry
+
+
+def test_scope_registry_normalizes_and_sorts_names() -> None:
+    """Verifies normalized scope names are sorted.
+
+    Returns:
+        None: Assertions validate registry behavior.
+    """
+
+    registry = ScopeRegistry(
+        [
+            ScopeDefinition(name="Work Flows", description="Workflow scope."),
+            ScopeDefinition(name="Platform", description="Platform scope."),
+        ]
+    )
+
+    assert [scope.name for scope in registry.list()] == ["platform", "work-flows"]
+
+
+def test_scope_registry_rejects_duplicate_names() -> None:
+    """Verifies duplicate scopes are rejected.
+
+    Returns:
+        None: Assertions validate duplicate detection.
+    """
+
+    with pytest.raises(ValueError, match="unique"):
+        ScopeRegistry(
+            [
+                ScopeDefinition(name="Platform", description="One."),
+                ScopeDefinition(name=" platform ", description="Two."),
+            ]
+        )

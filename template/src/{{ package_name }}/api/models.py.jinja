@@ -1,0 +1,202 @@
+"""Domain models for scopes{% if include_example_endpoint %}, example items,{% endif %} and queued work."""
+
+from __future__ import annotations
+
+from collections.abc import Sequence
+from dataclasses import dataclass, field
+from typing import Any, Protocol
+from uuid import uuid4
+
+from pydantic import BaseModel, Field
+
+{% if include_example_endpoint %}
+
+@dataclass(frozen=True, slots=True)
+class Item:
+    """Describes an example persisted item.
+
+    Attributes:
+        id (str): Item identifier.
+        name (str): Item name.
+        description (str): Item description.
+    """
+
+    id: str
+    name: str
+    description: str
+{% endif %}
+
+
+@dataclass(frozen=True, slots=True)
+class ScopeDefinition:
+    """Describes a bounded context.
+
+    Attributes:
+        name (str): Stable scope name.
+        description (str): Human-readable purpose.
+    """
+
+    name: str
+    description: str
+
+
+class ScopeRegistry:
+    """Stores configured scope definitions.
+
+    Attributes:
+        _scopes (dict[str, ScopeDefinition]): Scope definitions keyed by
+            normalized name.
+    """
+
+    def __init__(self, scopes: Sequence[ScopeDefinition]) -> None:
+        """Builds a scope registry.
+
+        Args:
+            scopes (Sequence[ScopeDefinition]): Scope definitions to register.
+
+        Returns:
+            None: The registry is initialized in-place.
+
+        Raises:
+            ValueError: If duplicate scope names are provided.
+        """
+
+        normalized_scopes = {
+            normalize_scope_name(scope.name): ScopeDefinition(
+                name=normalize_scope_name(scope.name),
+                description=scope.description,
+            )
+            for scope in scopes
+        }
+        if len(normalized_scopes) != len(scopes):
+            msg = "Scope names must be unique after normalization."
+            raise ValueError(msg)
+        self._scopes = normalized_scopes
+
+    def has(self, name: str) -> bool:
+        """Checks whether a scope exists.
+
+        Args:
+            name (str): Scope name to look up.
+
+        Returns:
+            bool: True when the scope exists.
+        """
+
+        return normalize_scope_name(name) in self._scopes
+
+    def list(self) -> tuple[ScopeDefinition, ...]:
+        """Lists configured scopes.
+
+        Returns:
+            tuple[ScopeDefinition, ...]: Registered scope definitions sorted by name.
+        """
+
+        return tuple(self._scopes[name] for name in sorted(self._scopes))
+
+
+def normalize_scope_name(name: str) -> str:
+    """Normalizes a scope name.
+
+    Args:
+        name (str): Raw scope name.
+
+    Returns:
+        str: Lowercase, hyphenated scope name.
+    """
+
+    return "-".join(name.strip().lower().split())
+
+
+@dataclass(frozen=True, slots=True)
+class QueuedTask:
+    """Represents a long-running task handoff.
+
+    Attributes:
+        task_id (str): Stable task identifier.
+        scope (str): Bounded context assigned to the task.
+        name (str): Task name.
+        payload (dict[str, Any]): Serialized task payload.
+    """
+
+    scope: str
+    name: str
+    payload: dict[str, Any] = field(default_factory=dict)
+    task_id: str = field(default_factory=lambda: str(uuid4()))
+
+    def to_message(self) -> QueuedTaskMessage:
+        """Converts the task to a message payload.
+
+        Returns:
+            QueuedTaskMessage: Message-safe representation of the task.
+        """
+
+        return QueuedTaskMessage(
+            task_id=self.task_id,
+            scope=self.scope,
+            name=self.name,
+            payload=self.payload,
+        )
+
+
+class QueuedTaskMessage(BaseModel):
+    """Serialized queue payload.
+
+    Attributes:
+        task_id (str): Task identifier.
+        scope (str): Normalized scope name.
+        name (str): Task name.
+        payload (dict[str, Any]): Task payload.
+    """
+
+    task_id: str
+    scope: str
+    name: str
+    payload: dict[str, Any] = Field(default_factory=dict)
+
+
+class UnknownScopeError(ValueError):
+    """Raised when a task targets an unknown scope."""
+
+
+class TaskQueue(Protocol):
+    """Defines the queue contract for long-running tasks."""
+
+    async def enqueue(self, task: QueuedTask) -> None:
+        """Queues a task.
+
+        Args:
+            task (QueuedTask): Task to queue.
+
+        Returns:
+            None: The task is queued remotely or in-memory.
+        """
+
+    async def ping(self) -> bool:
+        """Checks whether the queue backend is reachable.
+
+        Returns:
+            bool: True when the backend is healthy.
+        """
+
+    async def close(self) -> None:
+        """Closes queue resources.
+
+        Returns:
+            None: Queue resources are closed in-place.
+        """
+
+
+def build_task(scope: str, name: str, payload: dict[str, Any]) -> QueuedTask:
+    """Creates a normalized queued task.
+
+    Args:
+        scope (str): Requested scope name.
+        name (str): Task name.
+        payload (dict[str, Any]): Task payload.
+
+    Returns:
+        QueuedTask: Normalized queued task.
+    """
+
+    return QueuedTask(scope=normalize_scope_name(scope), name=name, payload=payload)

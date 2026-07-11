@@ -1,0 +1,115 @@
+"""Tests for long-running task dispatch."""
+
+from __future__ import annotations
+
+import pytest
+from tests.conftest import TEST_DATABASE_URL
+
+from {{ package_name }}.api.models import UnknownScopeError
+from {{ package_name }}.api.schemas import DispatchTaskRequest
+from {{ package_name }}.bootstrap import build_container
+from {{ package_name }}.core.config import ScopeSettings, Settings
+
+
+@pytest.mark.asyncio
+async def test_task_dispatcher_enqueues_long_running_work() -> None:
+    """Verifies the dispatcher enqueues a task.
+
+    Returns:
+        None: Assertions validate dispatch behavior.
+    """
+
+    container = build_container(
+        Settings(
+            telemetry_enabled=False,
+            queue_backend="memory",
+            scopes=[
+                ScopeSettings(
+                    name="ops",
+                    description="Operations scope.",
+                )
+            ],
+        )
+    )
+
+    response = await container.task_dispatcher.dispatch(
+        DispatchTaskRequest(
+            scope="ops",
+            name="rebuild-read-model",
+            payload={"attempt": 1},
+        )
+    )
+
+    assert response.scope == "ops"
+    assert response.queue_backend == "memory"
+    await container.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_task_dispatcher_rejects_unknown_scopes() -> None:
+    """Verifies the dispatcher rejects unknown scopes.
+
+    Returns:
+        None: Assertions validate error handling.
+    """
+
+    container = build_container(
+        Settings(
+            telemetry_enabled=False,
+            queue_backend="memory",
+        )
+    )
+
+    with pytest.raises(UnknownScopeError):
+        await container.task_dispatcher.dispatch(
+            DispatchTaskRequest(scope="missing", name="sync", payload={})
+        )
+
+    await container.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_health_service_reports_ok_when_dependencies_are_reachable() -> None:
+    """Verifies health reports ok when the queue and database are reachable.
+
+    Returns:
+        None: Assertions validate the healthy path against a real database.
+    """
+
+    container = build_container(
+        Settings(
+            telemetry_enabled=False,
+            queue_backend="memory",
+            database_url=TEST_DATABASE_URL,
+        )
+    )
+
+    health = await container.health_service.read()
+
+    assert health.status == "ok"
+    assert health.queue_healthy is True
+    assert health.database_healthy is True
+    await container.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_health_service_reports_degraded_when_database_is_unreachable() -> None:
+    """Verifies health reports degraded when the database cannot be reached.
+
+    Returns:
+        None: Assertions validate the degraded path with an unreachable database.
+    """
+
+    container = build_container(
+        Settings(
+            telemetry_enabled=False,
+            queue_backend="memory",
+            database_url="postgresql+asyncpg://nobody:nobody@localhost:59999/nowhere",
+        )
+    )
+
+    health = await container.health_service.read()
+
+    assert health.status == "degraded"
+    assert health.database_healthy is False
+    await container.shutdown()

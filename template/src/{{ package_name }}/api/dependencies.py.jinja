@@ -1,0 +1,111 @@
+"""FastAPI dependencies for dependency injection."""
+
+from __future__ import annotations
+
+from collections.abc import AsyncIterator
+from typing import Annotated
+
+from fastapi import Depends, HTTPException, Request, status
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from {{ package_name }}.api.models import UnknownScopeError
+from {{ package_name }}.api.services import HealthService, {% if include_example_endpoint %}ItemService, {% endif %}TaskDispatcher
+from {{ package_name }}.bootstrap import ServiceContainer
+
+
+def get_container(request: Request) -> ServiceContainer:
+    """Returns the application container.
+
+    Args:
+        request (Request): Current request.
+
+    Returns:
+        ServiceContainer: Application service container.
+    """
+
+    return request.app.state.container
+
+
+ContainerDep = Annotated[ServiceContainer, Depends(get_container)]
+
+
+def get_health_service(container: ContainerDep) -> HealthService:
+    """Returns the health service.
+
+    Args:
+        container (ServiceContainer): Application service container.
+
+    Returns:
+        HealthService: Health service instance.
+    """
+
+    return container.health_service
+
+
+HealthServiceDep = Annotated[HealthService, Depends(get_health_service)]
+
+{% if include_example_endpoint %}
+
+def get_item_service(container: ContainerDep) -> ItemService:
+    """Returns the item service.
+
+    This is a template dependency for demonstrating how to inject services.
+
+    Args:
+        container (ServiceContainer): Application service container.
+
+    Returns:
+        ItemService: Item service instance.
+    """
+
+    return container.item_service
+
+
+ItemServiceDep = Annotated[ItemService, Depends(get_item_service)]
+{% endif %}
+
+
+def get_task_dispatcher(container: ContainerDep) -> TaskDispatcher:
+    """Returns the task dispatcher.
+
+    Args:
+        container (ServiceContainer): Application service container.
+
+    Returns:
+        TaskDispatcher: Task dispatcher instance.
+    """
+
+    return container.task_dispatcher
+
+
+TaskDispatcherDep = Annotated[TaskDispatcher, Depends(get_task_dispatcher)]
+
+
+async def get_db_session(container: ContainerDep) -> AsyncIterator[AsyncSession]:
+    """Yields a request-scoped async SQLAlchemy session.
+
+    Args:
+        container (ServiceContainer): Application service container.
+
+    Returns:
+        AsyncIterator[AsyncSession]: Session closed after the response is sent.
+    """
+
+    async with container.session_manager.session() as session:
+        yield session
+
+
+DbSessionDep = Annotated[AsyncSession, Depends(get_db_session)]
+
+
+def raise_unknown_scope(error: UnknownScopeError) -> HTTPException:
+    """Maps an unknown scope error to HTTP 404.
+
+    Args:
+        error (UnknownScopeError): Domain error.
+
+    Returns:
+        HTTPException: HTTP 404 exception.
+    """
+
+    return HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(error))

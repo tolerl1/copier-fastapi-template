@@ -1,0 +1,208 @@
+# {{ project_name }}
+
+{{ description }}
+
+Built with `uv`, `prek`, Ruff, `ty` strict mode, `pyupgrade`, async SQLAlchemy, Alembic, queue handoff, and OpenTelemetry.
+
+## Features
+
+- Python {{ python_version }}+
+- `uv` package management and `uv_build`
+- `prek` Git hooks with Ruff, pyupgrade, `ty`, pytest, and conventional commit validation
+- GitHub Actions CI running Ruff, `ty`, and pytest on every push and pull request
+- Docker and Docker Compose for local Postgres and Redis
+- `library-skills` support for `.agents/skills` and `.claude/skills` discovery
+- Clear layering with configurable scopes
+- Dependency injection through a lightweight service container
+- Async FastAPI + SQLAlchemy ORM + `asyncpg`
+- Long-running task dispatch to Redis or Azure Storage Queue
+- Trace-aware logging with correlation IDs and OpenTelemetry instrumentation
+- Correlation ID propagation across requests and logs
+{% if include_example_endpoint -%}
+- Paginated collection endpoints with a default size of 20 and a maximum of 100
+- An example `/items` endpoint demonstrating the request/service/route pattern
+{% endif -%}
+- Alembic migrations
+- Tests that mirror the `src` package layout
+- GitHub Copilot, Claude, and agent instruction files
+
+## Project layout
+
+```text
+src/{{ package_name }}/
+  api/
+    models.py          # Domain models{% if include_example_endpoint %}: items, scope registry, task queues{% else %}: scope registry, task queues{% endif %}
+
+    schemas.py         # Request/response DTOs
+    services.py        # Application services
+    dependencies.py    # Dependency injection helpers (Annotated Dep aliases)
+  core/
+    config.py          # Configuration
+    logging.py          # Structured logging
+    telemetry.py        # OpenTelemetry tracing
+  database/
+    session.py          # SQLAlchemy session management and ORM models
+    queues.py            # Queue backend adapters
+{% if include_example_endpoint -%}
+    repositories.py      # Repository implementations
+{% endif -%}
+  routes/
+    router.py           # Per-domain API routers (system{% if include_example_endpoint %}, items{% endif %}, tasks)
+  main.py                # Application entrypoint
+  bootstrap.py           # Service container builder
+tests/{{ package_name }}/
+  api/
+    test_models.py     # Domain model tests
+    test_services.py   # Service tests
+    test_routes.py     # Route integration tests
+{% if include_example_endpoint -%}
+    test_items.py       # Example /items endpoint tests
+{% endif -%}
+  database/
+{% if include_example_endpoint -%}
+    test_repositories.py  # Repository tests against a real Postgres database
+{% endif -%}
+    test_queues.py         # Queue adapter tests against a real Redis instance
+```
+
+## Quick start
+
+```bash
+cp .env.example .env
+uv sync
+uv run {{ package_slug }}
+```
+
+The default `.env.example` points at the Postgres and Redis services defined in
+`docker-compose.yml`. Start them first if you don't have your own instances running:
+
+```bash
+docker compose up -d db redis
+uv run alembic upgrade head
+uv run {{ package_slug }}
+```
+
+`uv run {{ package_slug }}` is the canonical way to run the app locally; it
+reads `host`/`port` from `Settings` (`.env`). Because the project depends on
+`fastapi[standard]`, `uv run fastapi dev` and `uv run fastapi run` also work
+(reading the `[tool.fastapi]` entrypoint in `pyproject.toml` instead of
+`Settings`) if you want `fastapi dev`'s autoreload during development —
+just note its `--host`/`--port` flags are independent of `{{ env_prefix }}HOST`/
+`{{ env_prefix }}PORT`.
+
+## Running with Docker
+
+```bash
+cp .env.example .env
+docker compose up --build
+```
+
+This builds the application image and starts it alongside Postgres and Redis. The API
+is available at `http://localhost:8000`.
+
+## Quality checks
+
+```bash
+uv run ruff check .
+uv run ruff format .
+uv run ty check
+uv run pytest
+uv run library-skills --tool-skill install --claude --yes --all
+uv tool install prek
+prek install -t pre-commit -t commit-msg -t pre-push
+prek run --all-files
+```
+
+`prek install` with no `-t` flags only wires up the `pre-commit` stage; the
+conventional-commit check (`commit-msg`) and the pytest gate (`pre-push`)
+configured in `prek.toml` need their hook types installed explicitly.
+
+## Migrations
+
+```bash
+uv run alembic upgrade head
+uv run alembic revision --autogenerate -m "add new model"
+```
+
+## Testing
+
+Tests run against a real Postgres database and a real Redis instance rather
+than mocks, so both need to be reachable before running `uv run pytest`:
+
+```bash
+docker compose up -d db redis
+```
+
+By default tests use:
+
+- `{{ env_prefix }}TEST_DATABASE_URL` (defaults to
+  `postgresql+asyncpg://{{ package_name }}:{{ package_name }}@localhost:5432/{{ package_name }}_test`)
+- `{{ env_prefix }}TEST_REDIS_URL` (defaults to `redis://localhost:6379/1`)
+
+Override either if your local Postgres/Redis use different credentials or
+ports. A session-scoped fixture in `tests/conftest.py` applies Alembic
+migrations to the test database automatically before the suite runs. CI
+provisions matching Postgres and Redis service containers (see
+`.github/workflows/ci.yml`).
+
+## Queue backends
+
+Use environment variables to switch backends:
+
+- `{{ env_prefix }}QUEUE_BACKEND=memory`
+- `{{ env_prefix }}QUEUE_BACKEND=redis`
+- `{{ env_prefix }}QUEUE_BACKEND=azure_storage_queue`
+
+Define scopes with JSON in `{{ env_prefix }}SCOPES`, for example:
+
+```json
+[
+  {"name": "identity", "description": "Authentication and authorization."},
+  {"name": "orders", "description": "Ordering workflows."}
+]
+```
+
+## API conventions
+
+- `/health` reports queue reachability and a real database liveness check
+  (a pooled connection checkout through the async engine), not just URL-shape
+  validation.
+{% if include_example_endpoint -%}
+- `/items` is a real, Postgres-backed example endpoint demonstrating paginated
+  collections (`page_size=20` by default, `100` as the maximum) with a
+  request-scoped `AsyncSession` dependency and a repository. Replace it with
+  your own domain endpoints.
+{% endif -%}
+- `/tasks/dispatch` queues long-running work to the configured queue backend.
+
+Routes are grouped into per-domain `APIRouter`s in `routes/router.py`
+(`system_router`{% if include_example_endpoint %}, `items_router`{% endif %}, `tasks_router`), each declaring its own
+`prefix`/`tags` rather than repeating them per route — follow the same
+pattern when adding new domains.
+
+## Correlation IDs and request tracing
+
+All requests automatically receive a correlation ID for backend tracing:
+
+- Correlation IDs are generated internally for every request (UUID v4).
+- Correlation IDs are included in all response headers as `x-correlation-id`.
+- Correlation IDs are propagated through logs in the format:
+  ```
+  [correlation_id=<id> trace_id=<trace> span_id=<span>]
+  ```
+
+Use the response header value to trace a request through backend logs:
+
+```bash
+curl -i http://localhost:8000/health
+```
+
+**Backend observability**: Correlation IDs are intended for server-side request
+inspection. Clients do not supply them; downstream services should use the internally
+generated value when propagating backend trace context.
+
+## Agent skill discovery
+
+Run `uv run library-skills --tool-skill install --claude --yes --all` after
+dependency changes to refresh `.agents/skills` and `.claude/skills` symlinks
+for libraries that ship agent skills.

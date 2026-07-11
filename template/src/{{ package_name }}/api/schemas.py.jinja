@@ -1,0 +1,104 @@
+"""API request and response schemas."""
+
+from __future__ import annotations
+
+from typing import Any, Literal
+
+from pydantic import BaseModel, Field
+{% if include_example_endpoint %}
+
+from {{ package_name }}.api.models import Item
+
+
+class ItemDTO(BaseModel):
+    """Represents an example item.
+
+    Attributes:
+        id (str): Item identifier.
+        name (str): Item name.
+        description (str): Item description.
+    """
+
+    id: str
+    name: str
+    description: str
+
+    @classmethod
+    def from_item(cls, item: Item) -> ItemDTO:
+        """Converts a domain item to its response representation.
+
+        Args:
+            item (Item): Domain item.
+
+        Returns:
+            ItemDTO: Response representation of the item.
+        """
+
+        return cls(id=item.id, name=item.name, description=item.description)
+
+
+class PaginatedItemsDTO(BaseModel):
+    """Represents a paginated item list.
+
+    Attributes:
+        items (list[ItemDTO]): Items for the current page.
+        page (int): One-based page number.
+        page_size (int): Page size after validation.
+        total (int): Total number of items before pagination.
+    """
+
+    items: list[ItemDTO]
+    page: int
+    page_size: int
+    total: int
+{% endif %}
+
+
+class HealthDTO(BaseModel):
+    """Represents service health.
+
+    Attributes:
+        status (Literal["ok", "degraded"]): Overall status.
+        queue_backend (str): Queue backend name.
+        queue_healthy (bool): Queue reachability flag.
+        database_healthy (bool): Whether the database responded to a liveness query.
+        telemetry_enabled (bool): Whether OpenTelemetry is enabled.
+        scope_count (int): Number of configured scopes.
+    """
+
+    status: Literal["ok", "degraded"]
+    queue_backend: str
+    queue_healthy: bool
+    database_healthy: bool
+    telemetry_enabled: bool
+    scope_count: int
+
+
+class DispatchTaskRequest(BaseModel):
+    """Describes a long-running task request.
+
+    Attributes:
+        scope (str): Target scope name.
+        name (str): Task name.
+        payload (dict[str, Any]): Task payload.
+    """
+
+    scope: str
+    name: str
+    payload: dict[str, Any] = Field(default_factory=dict)
+
+
+class DispatchTaskResponse(BaseModel):
+    """Represents a queued task response.
+
+    Attributes:
+        task_id (str): Queued task identifier.
+        scope (str): Normalized scope name.
+        name (str): Task name.
+        queue_backend (str): Backend that accepted the task.
+    """
+
+    task_id: str
+    scope: str
+    name: str
+    queue_backend: str
