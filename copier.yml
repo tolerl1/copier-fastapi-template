@@ -19,6 +19,12 @@ _message_after_copy: |
     uv tool install prek
     prek install -t pre-commit -t commit-msg -t pre-push
 
+  Generation ran `uv lock` and `ruff format`/`ruff check --fix` for you.
+  If this machine had no network access those steps silently no-op'd — `uv
+  sync` above will still create `uv.lock` (needed before `docker compose up
+  --build` or CI's `uv sync --locked` will work), and `uv run ruff format .`
+  will still normalize formatting.
+
 package_name:
   type: str
   help: >-
@@ -31,7 +37,11 @@ package_name:
     Package name must be a valid lowercase Python identifier: start with a
     letter, then letters, digits, or underscores only (no hyphens).
     {% endif %}
-    {% if package_name in ["import", "class", "def", "return", "async", "await", "test", "tests", "src"] %}
+    {% if package_name in ["and", "as", "assert", "async", "await", "break",
+        "class", "continue", "def", "del", "elif", "else", "except",
+        "finally", "for", "from", "global", "if", "import", "in", "is",
+        "lambda", "nonlocal", "not", "or", "pass", "raise", "return", "try",
+        "while", "with", "yield", "test", "tests", "src"] %}
     Package name must not be a Python keyword or a reserved directory name.
     {% endif %}
 
@@ -95,5 +105,7 @@ _exclude:
 
 _tasks:
   - command: "git init"
-  - command: "uvx ruff format ."
-  - command: "uvx ruff check --fix --exit-zero ."
+  - command: "uv lock || true"
+  - command: "uvx ruff format . || true"
+  - command: "uvx ruff check --fix --exit-zero . || true"
+  - command: "rm -rf .ruff_cache"

@@ -1,7 +1,7 @@
 # GitHub Copilot Instructions
 
 - Use `uv` for dependency management, virtual environments, and command execution.
-- Preserve the layering: `api` (models, schemas, services, dependencies), `core` (config, logging, telemetry), `database` (session, queues, repositories), and `routes`.
+- Preserve the layering: `api` (models, schemas, services, dependencies), `core` (config, logging, telemetry), `database` (session, queues{% if include_example_endpoint %}, repositories{% endif %}), and `routes`.
 - Keep all HTTP handlers asynchronous.
 - Use SQLAlchemy ORM with `asyncpg`; do not introduce synchronous database access.
 - Add Google-style docstrings with explicit types for attributes, arguments, and returns.

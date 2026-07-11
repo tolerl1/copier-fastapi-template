@@ -12,6 +12,7 @@ jobs:
       fail-fast: false
       matrix:
         include_example_endpoint: ["true", "false"]
+        python_version: ["3.12", "3.13"]
     services:
       postgres:
         image: postgres:16-alpine
@@ -48,19 +49,19 @@ jobs:
           enable-cache: true
 
       - name: Set up Python
-        run: uv python install 3.12
+        run: uv python install ${{ matrix.python_version }}
 
       - name: Install Copier
         run: uv tool install copier
 
-      - name: Render template (include_example_endpoint=${{ matrix.include_example_endpoint }})
+      - name: Render template (include_example_endpoint=${{ matrix.include_example_endpoint }}, python_version=${{ matrix.python_version }})
         run: |
           uv tool run copier copy . /tmp/rendered \
             --data package_name=my_service \
             --data project_name="My Service" \
             --data description="Generated for template CI verification." \
             --data author_name="CI Runner" \
-            --data python_version=3.12 \
+            --data python_version=${{ matrix.python_version }} \
             --data include_example_endpoint=${{ matrix.include_example_endpoint }} \
             --defaults --trust --vcs-ref HEAD
 

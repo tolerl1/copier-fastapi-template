@@ -1,7 +1,7 @@
 # Claude Instructions
 
 - Use `uv sync` to install dependencies and `uv run` for all project commands.
-- Organize code using the existing layering: `api` (models, schemas, services), `core` (config, logging, telemetry), `database` (session, queues, repositories), and `routes`.
+- Organize code using the existing layering: `api` (models, schemas, services), `core` (config, logging, telemetry), `database` (session, queues{% if include_example_endpoint %}, repositories{% endif %}), and `routes`.
 - Do not bypass dependency injection; extend the `ServiceContainer` in `bootstrap.py` instead.
 - Add or update scopes through `Settings.scopes` and `ScopeRegistry`.
 - Keep request handlers non-blocking and move long-running work to the configured queue backend.

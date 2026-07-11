@@ -113,10 +113,10 @@ class QueuedTask:
     """Represents a long-running task handoff.
 
     Attributes:
-        task_id (str): Stable task identifier.
         scope (str): Bounded context assigned to the task.
         name (str): Task name.
         payload (dict[str, Any]): Serialized task payload.
+        task_id (str): Stable task identifier.
     """
 
     scope: str
