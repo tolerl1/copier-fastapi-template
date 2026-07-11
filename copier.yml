@@ -95,6 +95,5 @@ _exclude:
 
 _tasks:
   - command: "git init"
-    when: "{{ _copier_conf.operation == 'copy' }}"
   - command: "uvx ruff format ."
   - command: "uvx ruff check --fix --exit-zero ."
