@@ -1,5 +1,8 @@
 _subdirectory: template
 _min_copier_version: "9.0.0"
+_envops:
+  trim_blocks: true
+  lstrip_blocks: true
 
 _message_after_copy: |
   Project generated in {{ _copier_conf.dst_path }}.
@@ -93,3 +96,5 @@ _exclude:
 _tasks:
   - command: "git init"
     when: "{{ _copier_conf.operation == 'copy' }}"
+  - command: "uvx ruff format ."
+  - command: "uvx ruff check --fix --exit-zero ."
