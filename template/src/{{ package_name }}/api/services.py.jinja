@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import asyncio
 import logging
+
 {% if include_example_endpoint %}
 from sqlalchemy.ext.asyncio import AsyncSession
-{% endif %}
 
+{% endif %}
 from {{ package_name }}.api.models import (
     ScopeRegistry,
     TaskQueue,
