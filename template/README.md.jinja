@@ -2,29 +2,40 @@
 
 {{ description }}
 
-Built with `uv`, `prek`, Ruff, `ty` strict mode, `pyupgrade`, async SQLAlchemy, Alembic, queue handoff, and OpenTelemetry.
+Built with `uv`, `prek`, Ruff, `pyright`, `pyupgrade`, async SQLAlchemy, Alembic, and queue handoff{% if enable_telemetry %}, and OpenTelemetry{% endif %}.
 
 ## Features
 
 - Python {{ python_version }}+
-- `uv` package management and `uv_build`
-- `prek` Git hooks with Ruff, pyupgrade, `ty`, pytest, and conventional commit validation
-- GitHub Actions CI running Ruff, `ty`, and pytest on every push and pull request
-- Docker and Docker Compose for local Postgres and Redis
+- `uv` package management with a `hatchling` build backend
+- `prek` Git hooks with Ruff, pyupgrade, `pyright`, pytest, and conventional commit validation
+- GitHub Actions CI running Ruff, `pyright`, and pytest on every push and pull request
+- Docker and Docker Compose for local Postgres and Redis; the app image runs as a
+  non-root user and ships a `HEALTHCHECK` against `/health`
+- Dependabot for `uv`, GitHub Actions, and Docker base image updates
 - `library-skills` support for `.agents/skills` and `.claude/skills` discovery
 - Clear layering with configurable scopes
 - Dependency injection through a lightweight service container
 - Async FastAPI + SQLAlchemy ORM + `asyncpg`
-- Long-running task dispatch to Redis or Azure Storage Queue
+- Long-running task dispatch to Redis or Azure Storage Queue (the latter behind
+  an optional `azure` extra — see [Queue backends](#queue-backends))
+{% if enable_telemetry -%}
 - Trace-aware logging with correlation IDs and OpenTelemetry instrumentation
+{% else -%}
+- Correlation-ID-aware structured logging (OpenTelemetry tracing left out —
+  regenerate with `enable_telemetry=true` to add it back)
+{% endif -%}
 - Correlation ID propagation across requests and logs
 {% if include_example_endpoint -%}
 - Paginated collection endpoints with a default size of 20 and a maximum of 100
 - An example `/items` endpoint demonstrating the request/service/route pattern
 {% endif -%}
 - Alembic migrations
+- Commitizen-driven `CHANGELOG.md` and version bumps on merge to `main`
+  (`.github/workflows/release.yml`)
 - Tests that mirror the `src` package layout
 - GitHub Copilot, Claude, and agent instruction files
+- `CONTRIBUTING.md`, a Code of Conduct, and issue/PR templates
 
 ## Project layout
 
@@ -39,7 +50,9 @@ src/{{ package_name }}/
   core/
     config.py          # Configuration
     logging.py          # Structured logging
+{% if enable_telemetry -%}
     telemetry.py        # OpenTelemetry tracing
+{% endif -%}
   database/
     session.py          # SQLAlchemy session management and ORM models
     queues.py            # Queue backend adapters
@@ -49,7 +62,8 @@ src/{{ package_name }}/
   routes/
     router.py           # Per-domain API routers (system{% if include_example_endpoint %}, items{% endif %}, tasks)
   main.py                # Application entrypoint
-  bootstrap.py           # Service container builder
+  container.py            # ServiceContainer shape (no service imports at runtime)
+  bootstrap.py            # Builds a ServiceContainer from Settings
 tests/{{ package_name }}/
   api/
     test_models.py     # Domain model tests
@@ -64,6 +78,12 @@ tests/{{ package_name }}/
 {% endif -%}
     test_queues.py         # Queue adapter tests against a real Redis instance
 ```
+
+`container.py` only defines the `ServiceContainer` dataclass (its field types
+are `TYPE_CHECKING`-only imports); `bootstrap.py` does the actual wiring and
+is the only module that imports the concrete services. Request-time code
+(`api/dependencies.py`) imports `container.py`, not `bootstrap.py`, so it
+never pulls in the full service graph just to get the container's shape.
 
 ## Quick start
 
@@ -90,6 +110,10 @@ reads `host`/`port` from `Settings` (`.env`). Because the project depends on
 just note its `--host`/`--port` flags are independent of `{{ env_prefix }}HOST`/
 `{{ env_prefix }}PORT`.
 
+A `Makefile` wraps the common commands (`make install`, `make dev`, `make test`,
+`make lint`, `make format`, `make typecheck`, `make check`, `make migrate`,
+`make up`, `make hooks`) if you'd rather not type the `uv run ...` forms.
+
 ## Running with Docker
 
 ```bash
@@ -98,14 +122,15 @@ docker compose up --build
 ```
 
 This builds the application image and starts it alongside Postgres and Redis. The API
-is available at `http://localhost:8000`.
+is available at `http://localhost:8000`. The image runs as a non-root user and
+declares a `HEALTHCHECK` against `/health`.
 
 ## Quality checks
 
 ```bash
 uv run ruff check .
 uv run ruff format .
-uv run ty check
+uv run pyright
 uv run pytest
 uv run library-skills --tool-skill install --claude --yes --all
 uv tool install prek
@@ -153,6 +178,21 @@ Use environment variables to switch backends:
 - `{{ env_prefix }}QUEUE_BACKEND=redis`
 - `{{ env_prefix }}QUEUE_BACKEND=azure_storage_queue`
 
+`azure-storage-queue` is an optional dependency (the `azure` extra), not a
+default install, since most projects only need `memory` or `redis`. Install
+it before switching to the Azure backend:
+
+```bash
+uv sync --extra azure
+```
+
+Selecting `azure_storage_queue` without the extra installed raises a clear
+`ImportError` at queue-construction time telling you to run the command
+above. To add a different backend (SQS, GCP Pub/Sub, ...), implement the
+same `enqueue`/`ping`/`close` protocol as `RedisTaskQueue` in
+`database/queues.py`, add it as its own optional extra in `pyproject.toml`,
+and branch on it in `create_task_queue`.
+
 Define scopes with JSON in `{{ env_prefix }}SCOPES`, for example:
 
 ```json
@@ -188,7 +228,7 @@ All requests automatically receive a correlation ID for backend tracing:
 - Correlation IDs are included in all response headers as `x-correlation-id`.
 - Correlation IDs are propagated through logs in the format:
   ```
-  [correlation_id=<id> trace_id=<trace> span_id=<span>]
+  [correlation_id=<id>{% if enable_telemetry %} trace_id=<trace> span_id=<span>{% endif %}]
   ```
 
 Use the response header value to trace a request through backend logs:
@@ -200,6 +240,14 @@ curl -i http://localhost:8000/health
 **Backend observability**: Correlation IDs are intended for server-side request
 inspection. Clients do not supply them; downstream services should use the internally
 generated value when propagating backend trace context.
+
+## Releasing
+
+`.github/workflows/release.yml` runs Commitizen on every push to `main`: it
+inspects [Conventional Commits](https://www.conventionalcommits.org/) since
+the last tag, bumps the version in `pyproject.toml`, updates `CHANGELOG.md`,
+and pushes a `vX.Y.Z` tag. Nothing to do manually beyond following the commit
+message convention (already enforced by the `commit-msg` hook).
 
 ## Agent skill discovery
 

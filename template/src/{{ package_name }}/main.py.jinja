@@ -12,7 +12,9 @@ from {{ package_name }}.bootstrap import build_container
 from {{ package_name }}.core.config import Settings
 from {{ package_name }}.core.correlation import CorrelationIdMiddleware
 from {{ package_name }}.core.logging import configure_logging
+{% if enable_telemetry %}
 from {{ package_name }}.core.telemetry import configure_telemetry
+{% endif %}
 from {{ package_name }}.routes.router import router
 
 
@@ -47,7 +49,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.container = build_container(resolved_settings)
     app.add_middleware(CorrelationIdMiddleware)
     app.include_router(router)
+{% if enable_telemetry %}
     configure_telemetry(app, resolved_settings)
+{% endif %}
     return app
 
 

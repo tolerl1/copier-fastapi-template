@@ -31,9 +31,9 @@ hooks = [{ id = "commitizen", stages = ["commit-msg"] }]
 repo = "local"
 
 [[repos.hooks]]
-id = "ty-check"
-name = "ty-check"
-entry = "uv run ty check"
+id = "pyright"
+name = "pyright"
+entry = "uv run pyright"
 language = "system"
 pass_filenames = false
 files = "^(src|tests)/"

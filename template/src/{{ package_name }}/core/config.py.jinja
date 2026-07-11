@@ -30,8 +30,10 @@ class Settings(BaseSettings):
         port (int): Port Uvicorn binds to when run via `serve()`.
         database_url (str): Async SQLAlchemy connection string using asyncpg.
         log_level (str): Root logging level, including TRACE support.
+{% if enable_telemetry %}
         telemetry_enabled (bool): Enables OpenTelemetry instrumentation.
         otlp_endpoint (str | None): Optional OTLP HTTP endpoint.
+{% endif %}
         queue_backend (
             Literal["memory", "redis", "azure_storage_queue"]
         ): Queue backend.
@@ -55,9 +57,11 @@ class Settings(BaseSettings):
     host: str = "0.0.0.0"
     port: int = 8000
     database_url: str = "postgresql+asyncpg:///{{ package_name }}"
-    log_level: str = "TRACE"
+    log_level: str = "INFO"
+{% if enable_telemetry %}
     telemetry_enabled: bool = True
     otlp_endpoint: str | None = None
+{% endif %}
     queue_backend: Literal["memory", "redis", "azure_storage_queue"] = "memory"
     queue_name: str = "long-running-tasks"
     redis_url: str = "redis://localhost:6379/0"

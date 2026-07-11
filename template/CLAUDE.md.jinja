@@ -1,10 +1,16 @@
 # Claude Instructions
 
 - Use `uv sync` to install dependencies and `uv run` for all project commands.
-- Organize code using the existing layering: `api` (models, schemas, services), `core` (config, logging, telemetry), `database` (session, queues{% if include_example_endpoint %}, repositories{% endif %}), and `routes`.
-- Do not bypass dependency injection; extend the `ServiceContainer` in `bootstrap.py` instead.
+- Organize code using the existing layering: `api` (models, schemas, services), `core` (config, logging{% if enable_telemetry %}, telemetry{% endif %}), `database` (session, queues{% if include_example_endpoint %}, repositories{% endif %}), and `routes`.
+- Do not bypass dependency injection; the `ServiceContainer` shape lives in `container.py`, built by `bootstrap.py`. Extend both together, and keep `container.py` free of runtime imports from `api`/`database` (`TYPE_CHECKING` only) — that's what keeps `api/dependencies.py` from having to import the whole service graph just to type-hint the container.
 - Add or update scopes through `Settings.scopes` and `ScopeRegistry`.
 - Keep request handlers non-blocking and move long-running work to the configured queue backend.
+- `azure-storage-queue` is an optional dependency (the `azure` extra); `database/queues.py` imports it lazily. Don't move that import back to module scope.
 - Maintain Google-style docstrings with explicit types.
+{% if enable_telemetry -%}
 - Keep tracing enabled through `core/telemetry.py` and trace-aware logging through `core/logging.py`.
+{% else -%}
+- OpenTelemetry is disabled for this project (`enable_telemetry=false`); `core/logging.py` only injects the correlation ID, not trace/span IDs.
+{% endif -%}
 - Refresh `.claude/skills` and `.agents/skills` with `uv run library-skills --tool-skill install --claude --yes --all` after dependency changes.
+- Type-check with `pyright` (standard mode), not mypy or `ty`.

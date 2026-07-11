@@ -59,7 +59,9 @@ async def test_get_item_service_returns_container_owned_service() -> None:
 
     container = build_container(
         Settings(
+{% if enable_telemetry %}
             telemetry_enabled=False,
+{% endif %}
             queue_backend="memory",
         )
     )

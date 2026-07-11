@@ -172,6 +172,8 @@ class TaskQueue(Protocol):
             None: The task is queued remotely or in-memory.
         """
 
+        ...
+
     async def ping(self) -> bool:
         """Checks whether the queue backend is reachable.
 
@@ -179,12 +181,16 @@ class TaskQueue(Protocol):
             bool: True when the backend is healthy.
         """
 
+        ...
+
     async def close(self) -> None:
         """Closes queue resources.
 
         Returns:
             None: Queue resources are closed in-place.
         """
+
+        ...
 
 
 def build_task(scope: str, name: str, payload: dict[str, Any]) -> QueuedTask:

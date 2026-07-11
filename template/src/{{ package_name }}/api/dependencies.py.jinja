@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from {{ package_name }}.api.models import UnknownScopeError
 from {{ package_name }}.api.services import HealthService, {% if include_example_endpoint %}ItemService, {% endif %}TaskDispatcher
-from {{ package_name }}.bootstrap import ServiceContainer
+from {{ package_name }}.container import ServiceContainer
 
 
 def get_container(request: Request) -> ServiceContainer:

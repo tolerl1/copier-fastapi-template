@@ -12,6 +12,7 @@ jobs:
       fail-fast: false
       matrix:
         include_example_endpoint: ["true", "false"]
+        enable_telemetry: ["true", "false"]
         python_version: ["3.12", "3.13"]
     services:
       postgres:
@@ -54,7 +55,7 @@ jobs:
       - name: Install Copier
         run: uv tool install copier
 
-      - name: Render template (include_example_endpoint=${{ matrix.include_example_endpoint }}, python_version=${{ matrix.python_version }})
+      - name: Render template (include_example_endpoint=${{ matrix.include_example_endpoint }}, enable_telemetry=${{ matrix.enable_telemetry }}, python_version=${{ matrix.python_version }})
         run: |
           uv tool run copier copy . /tmp/rendered \
             --data package_name=my_service \
@@ -63,6 +64,7 @@ jobs:
             --data author_name="CI Runner" \
             --data python_version=${{ matrix.python_version }} \
             --data include_example_endpoint=${{ matrix.include_example_endpoint }} \
+            --data enable_telemetry=${{ matrix.enable_telemetry }} \
             --defaults --trust --vcs-ref HEAD
 
       - name: Install rendered project dependencies
@@ -79,7 +81,7 @@ jobs:
 
       - name: Type check
         working-directory: /tmp/rendered
-        run: uv run ty check
+        run: uv run pyright
 
       - name: Run tests
         working-directory: /tmp/rendered

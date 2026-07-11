@@ -1,0 +1,25 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  bump:
+    if: "!startsWith(github.event.head_commit.message, 'bump:')"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: {{ '${{' }} secrets.GITHUB_TOKEN {{ '}}' }}
+
+      - name: Bump version and update CHANGELOG.md
+        uses: commitizen-tools/commitizen-action@0.21.0
+        with:
+          github_token: {{ '${{' }} secrets.GITHUB_TOKEN {{ '}}' }}
+          changelog_increment_filename: body.md

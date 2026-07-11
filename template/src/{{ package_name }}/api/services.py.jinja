@@ -115,7 +115,9 @@ class HealthService:
             queue_backend=self._settings.queue_backend,
             queue_healthy=queue_healthy,
             database_healthy=database_healthy,
+{% if enable_telemetry %}
             telemetry_enabled=self._settings.telemetry_enabled,
+{% endif %}
             scope_count=len(self._scope_registry.list()),
         )
 

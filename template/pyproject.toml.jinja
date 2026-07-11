@@ -13,12 +13,18 @@ dependencies = [
     "asyncpg>=0.30.0",
     "alembic>=1.16.4",
     "redis>=6.2.0",
-    "azure-storage-queue>=12.14.0",
+{% if enable_telemetry %}
     "opentelemetry-api>=1.36.0",
     "opentelemetry-sdk>=1.36.0",
     "opentelemetry-exporter-otlp-proto-http>=1.36.0",
     "opentelemetry-instrumentation-fastapi>=0.57b0",
+{% endif %}
 ]
+
+[project.optional-dependencies]
+# Only needed when {{ env_prefix }}QUEUE_BACKEND=azure_storage_queue. Install
+# with `uv sync --extra azure` (or `uv add --optional azure azure-storage-queue`).
+azure = ["azure-storage-queue>=12.14.0"]
 
 [dependency-groups]
 dev = [
@@ -26,11 +32,11 @@ dev = [
     "commitizen>=4.16.3",
     "library-skills>=0.0.19",
     "prek>=0.4.8",
+    "pyright>=1.1.390",
     "pytest>=8.4.1",
     "pytest-asyncio>=1.1.0",
     "pyupgrade>=3.20.0",
     "ruff>=0.15.0",
-    "ty>=0.0.26",
 ]
 
 [project.scripts]
@@ -40,8 +46,11 @@ dev = [
 entrypoint = "{{ package_name }}.main:app"
 
 [build-system]
-requires = ["uv_build>=0.8.22,<0.9.0"]
-build-backend = "uv_build"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/{{ package_name }}"]
 
 [tool.uv]
 default-groups = ["dev"]
@@ -57,17 +66,12 @@ select = ["E", "F", "I", "UP", "B", "RUF", "SIM", "ASYNC", "FAST"]
 [tool.ruff.lint.per-file-ignores]
 "tests/**/*.py" = ["S101"]
 
-[tool.ty.environment]
-python-version = "{{ python_version }}"
-
-[tool.ty.src]
+[tool.pyright]
 include = ["src", "tests"]
-
-[tool.ty.rules]
-all = "error"
-
-[tool.ty.terminal]
-error-on-warning = true
+venvPath = "."
+venv = ".venv"
+pythonVersion = "{{ python_version }}"
+typeCheckingMode = "standard"
 
 [tool.pytest.ini_options]
 addopts = "-q --import-mode=importlib"
@@ -81,4 +85,4 @@ name = "cz_conventional_commits"
 tag_format = "v$version"
 version_provider = "pep621"
 version_scheme = "semver2"
-update_changelog_on_bump = false
+update_changelog_on_bump = true

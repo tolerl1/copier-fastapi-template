@@ -76,6 +76,15 @@ include_example_endpoint:
     this off to start from a clean slate with no example domain code.
   default: false
 
+enable_telemetry:
+  type: bool
+  help: >-
+    Wire up OpenTelemetry tracing (tracer provider, OTLP/console exporter,
+    FastAPI instrumentation, trace IDs in log lines)? Leave this off to skip
+    the four opentelemetry-* dependencies and the whole core/telemetry.py
+    module for services that don't run a collector.
+  default: true
+
 package_slug:
   type: str
   when: false
@@ -102,6 +111,7 @@ _exclude:
   - "{% if not include_example_endpoint %}tests/{{ package_name }}/api/test_items.py{% endif %}"
   - "{% if not include_example_endpoint %}tests/{{ package_name }}/database/test_repositories.py{% endif %}"
   - "{% if not include_example_endpoint %}alembic/versions/0001_create_items_table.py{% endif %}"
+  - "{% if not enable_telemetry %}src/{{ package_name }}/core/telemetry.py{% endif %}"
 
 _tasks:
   - command: "git init"

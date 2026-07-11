@@ -62,7 +62,9 @@ class HealthDTO(BaseModel):
         queue_backend (str): Queue backend name.
         queue_healthy (bool): Queue reachability flag.
         database_healthy (bool): Whether the database responded to a liveness query.
+{% if enable_telemetry %}
         telemetry_enabled (bool): Whether OpenTelemetry is enabled.
+{% endif %}
         scope_count (int): Number of configured scopes.
     """
 
@@ -70,7 +72,9 @@ class HealthDTO(BaseModel):
     queue_backend: str
     queue_healthy: bool
     database_healthy: bool
+{% if enable_telemetry %}
     telemetry_enabled: bool
+{% endif %}
     scope_count: int
 
 

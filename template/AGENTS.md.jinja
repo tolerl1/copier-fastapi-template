@@ -4,7 +4,9 @@
 - Hooks: `prek install -t pre-commit -t commit-msg -t pre-push` then `prek run --all-files`
 - Skill sync: `uv run library-skills --tool-skill install --claude --yes --all`
 - Linting: `uv run ruff check .` and `uv run ruff format .`
-- Type checking: `uv run ty check`
+- Type checking: `uv run pyright`
 - Tests: `uv run pytest`
 - Migrations: `uv run alembic upgrade head`
-- Architecture: Configurable scopes with dependency injection, async SQLAlchemy, queue handoff, and OpenTelemetry
+- Architecture: Configurable scopes with dependency injection, async SQLAlchemy, queue handoff{% if enable_telemetry %}, and OpenTelemetry{% endif %}
+- `container.py` defines the `ServiceContainer` shape (no runtime service imports); `bootstrap.py` builds one. Don't import `bootstrap` from request-time code — import `container` instead.
+- `azure-storage-queue` is optional (`uv sync --extra azure`); don't hard-import it at module scope in `database/queues.py`.
