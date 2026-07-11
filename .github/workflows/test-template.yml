@@ -80,10 +80,6 @@ jobs:
         working-directory: /tmp/rendered
         run: uv run ty check
 
-      - name: Run migrations
-        working-directory: /tmp/rendered
-        run: uv run alembic upgrade head
-
       - name: Run tests
         working-directory: /tmp/rendered
         run: uv run pytest

@@ -117,8 +117,10 @@ above it is about maintaining the template itself.
 `.github/workflows/test-template.yml` renders the template twice (once with
 `include_example_endpoint=true`, once with `false`) against real Postgres and
 Redis service containers, then runs `ruff check`, `ruff format --check`,
-`ty check`, `alembic upgrade head`, and `pytest` inside each rendered
-project. Run the same steps locally before pushing template changes:
+`ty check`, and `pytest` inside each rendered project (a session-scoped
+fixture in the rendered project's own `tests/conftest.py` applies Alembic
+migrations to the test database automatically — no separate migration step
+is needed). Run the same steps locally before pushing template changes:
 
 ```bash
 uv tool install copier
@@ -129,6 +131,5 @@ cd /tmp/rendered-with-items
 uv sync
 uv run ruff check . && uv run ruff format --check . && uv run ty check
 docker compose up -d db redis   # or point *_TEST_DATABASE_URL / *_TEST_REDIS_URL elsewhere
-uv run alembic upgrade head
 uv run pytest
 ```
