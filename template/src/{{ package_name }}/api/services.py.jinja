@@ -119,8 +119,8 @@ class HealthService:
             scope_count=len(self._scope_registry.list()),
         )
 
-{% if include_example_endpoint %}
 
+{% if include_example_endpoint %}
 class ItemService:
     """Example service for listing items.
 
@@ -168,9 +168,9 @@ class ItemService:
             page_size=page_size,
             total=total,
         )
+
+
 {% endif %}
-
-
 class TaskDispatcher:
     """Queues long-running work to the configured backend.
 

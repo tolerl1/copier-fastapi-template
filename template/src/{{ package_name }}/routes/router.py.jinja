@@ -51,8 +51,8 @@ async def health_check(health_service: HealthServiceDep) -> HealthDTO:
 
     return await health_service.read()
 
-{% if include_example_endpoint %}
 
+{% if include_example_endpoint %}
 @items_router.get("")
 async def list_items(
     item_service: ItemServiceDep,
@@ -76,9 +76,9 @@ async def list_items(
     """
 
     return await item_service.page(session, page=page, page_size=page_size)
+
+
 {% endif %}
-
-
 @tasks_router.post("/dispatch", status_code=202)
 async def dispatch_task(
     request: DispatchTaskRequest,

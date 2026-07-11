@@ -44,8 +44,8 @@ def get_health_service(container: ContainerDep) -> HealthService:
 
 HealthServiceDep = Annotated[HealthService, Depends(get_health_service)]
 
-{% if include_example_endpoint %}
 
+{% if include_example_endpoint %}
 def get_item_service(container: ContainerDep) -> ItemService:
     """Returns the item service.
 
@@ -62,9 +62,9 @@ def get_item_service(container: ContainerDep) -> ItemService:
 
 
 ItemServiceDep = Annotated[ItemService, Depends(get_item_service)]
+
+
 {% endif %}
-
-
 def get_task_dispatcher(container: ContainerDep) -> TaskDispatcher:
     """Returns the task dispatcher.
 
