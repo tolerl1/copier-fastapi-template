@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import contextlib
+
+from azure.core.exceptions import ResourceExistsError, ResourceNotFoundError
 from azure.storage.queue.aio import QueueClient
 from redis.asyncio import Redis
 
@@ -129,6 +132,20 @@ class AzureStorageQueueTaskQueue:
 
         self._client = client
 
+    async def _create_queue_if_missing(self) -> None:
+        """Creates the target queue, tolerating a concurrent creator.
+
+        Azure Storage Queue does not auto-create queues on first write the
+        way Redis auto-creates lists on RPUSH, so a fresh deployment's queue
+        has to be provisioned lazily here instead of failing outright.
+
+        Returns:
+            None: The queue exists once this returns.
+        """
+
+        with contextlib.suppress(ResourceExistsError):
+            await self._client.create_queue()
+
     async def enqueue(self, task: QueuedTask) -> None:
         """Queues a task in Azure Storage Queue.
 
@@ -139,18 +156,33 @@ class AzureStorageQueueTaskQueue:
             None: The serialized task is sent to Azure Storage Queue.
         """
 
-        await self._client.send_message(task.to_message().model_dump_json())
+        message = task.to_message().model_dump_json()
+        try:
+            await self._client.send_message(message)
+        except ResourceNotFoundError:
+            await self._create_queue_if_missing()
+            await self._client.send_message(message)
 
     async def ping(self) -> bool:
         """Checks Azure Storage Queue availability.
 
+        Creates the target queue if it doesn't exist yet, so a fresh
+        deployment reports healthy instead of degraded before the first
+        task is ever dispatched.
+
         Returns:
-            bool: True when queue metadata can be read.
+            bool: True when the queue is reachable (and now provisioned).
         """
 
         try:
             await self._client.get_queue_properties()
             return True
+        except ResourceNotFoundError:
+            try:
+                await self._create_queue_if_missing()
+                return True
+            except Exception:
+                return False
         except Exception:
             return False
 

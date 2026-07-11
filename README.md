@@ -81,11 +81,15 @@ earlier version:
 
 ```bash
 cd path/to/existing-project
-copier update
+copier update --defaults
 ```
 
 This works because `copier copy` records the answers you gave in
-`.copier-answers.yml` at the project root — don't delete that file.
+`.copier-answers.yml` at the project root — don't delete that file. Running
+`copier update` interactively (no `--defaults`) is fine in a terminal, where
+it can re-prompt you if needed; in a script or CI it fails with "Interactive
+session required" unless you pass `--defaults` (reuse the recorded answers)
+and/or `--data`/`--data-file` to supply any new questions non-interactively.
 
 ## Repository layout
 

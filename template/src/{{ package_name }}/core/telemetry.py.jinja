@@ -12,6 +12,29 @@ from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExport
 
 from {{ package_name }}.core.config import Settings
 
+_TRACES_PATH = "v1/traces"
+
+
+def _resolve_traces_endpoint(otlp_endpoint: str) -> str:
+    """Appends the OTLP traces signal path if the endpoint doesn't have one.
+
+    `OTLPSpanExporter` only auto-appends `v1/traces` when it falls back to
+    reading `OTEL_EXPORTER_OTLP_ENDPOINT` from the environment; an explicit
+    `endpoint=` argument (what this module passes) is used verbatim. Without
+    this, a bare collector base URL silently 404s instead of exporting.
+
+    Args:
+        otlp_endpoint (str): Configured OTLP endpoint, base URL or full path.
+
+    Returns:
+        str: Endpoint guaranteed to end with the traces signal path.
+    """
+
+    trimmed = otlp_endpoint.rstrip("/")
+    if trimmed.endswith(_TRACES_PATH):
+        return otlp_endpoint
+    return f"{trimmed}/{_TRACES_PATH}"
+
 
 def configure_telemetry(app: FastAPI, settings: Settings) -> None:
     """Enables OpenTelemetry tracing for the FastAPI application.
@@ -36,7 +59,7 @@ def configure_telemetry(app: FastAPI, settings: Settings) -> None:
         )
     )
     exporter = (
-        OTLPSpanExporter(endpoint=settings.otlp_endpoint)
+        OTLPSpanExporter(endpoint=_resolve_traces_endpoint(settings.otlp_endpoint))
         if settings.otlp_endpoint
         else ConsoleSpanExporter()
     )
