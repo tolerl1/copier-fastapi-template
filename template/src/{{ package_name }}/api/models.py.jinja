@@ -9,8 +9,8 @@ from uuid import uuid4
 
 from pydantic import BaseModel, Field
 
-{% if include_example_endpoint %}
 
+{% if include_example_endpoint %}
 @dataclass(frozen=True, slots=True)
 class Item:
     """Describes an example persisted item.
@@ -24,9 +24,9 @@ class Item:
     id: str
     name: str
     description: str
+
+
 {% endif %}
-
-
 @dataclass(frozen=True, slots=True)
 class ScopeDefinition:
     """Describes a bounded context.

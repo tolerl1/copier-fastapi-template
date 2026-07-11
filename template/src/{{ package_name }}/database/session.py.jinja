@@ -11,14 +11,18 @@ from sqlalchemy.ext.asyncio import (
     async_sessionmaker,
     create_async_engine,
 )
+{% if include_example_endpoint %}
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+{% else %}
+from sqlalchemy.orm import DeclarativeBase
+{% endif %}
 
 
 class Base(DeclarativeBase):
     """Declarative base for ORM models."""
 
-{% if include_example_endpoint %}
 
+{% if include_example_endpoint %}
 class ItemModel(Base):
     """Persists example items for the `/items` endpoint.
 
@@ -33,9 +37,9 @@ class ItemModel(Base):
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     name: Mapped[str]
     description: Mapped[str]
+
+
 {% endif %}
-
-
 class DatabaseSessionManager:
     """Creates async SQLAlchemy sessions.
 
