@@ -1,0 +1,227 @@
+"""Queue adapters for long-running work."""
+
+from __future__ import annotations
+
+import contextlib
+
+from azure.core.exceptions import ResourceExistsError, ResourceNotFoundError
+from azure.storage.queue.aio import QueueClient
+from redis.asyncio import Redis
+
+from {{ package_name }}.api.models import QueuedTask, TaskQueue
+from {{ package_name }}.core.config import Settings
+
+
+class InMemoryTaskQueue:
+    """Stores tasks in memory for tests and local development.
+
+    Attributes:
+        messages (list[str]): Serialized task messages.
+    """
+
+    def __init__(self) -> None:
+        """Creates the in-memory queue.
+
+        Returns:
+            None: The queue is initialized in-place.
+        """
+
+        self.messages: list[str] = []
+
+    async def enqueue(self, task: QueuedTask) -> None:
+        """Queues a task in memory.
+
+        Args:
+            task (QueuedTask): Task to enqueue.
+
+        Returns:
+            None: The serialized task is appended in-place.
+        """
+
+        self.messages.append(task.to_message().model_dump_json())
+
+    async def ping(self) -> bool:
+        """Reports queue health.
+
+        Returns:
+            bool: Always True for the in-memory queue.
+        """
+
+        return True
+
+    async def close(self) -> None:
+        """Closes the in-memory queue.
+
+        Returns:
+            None: No resources are held.
+        """
+
+
+class RedisTaskQueue:
+    """Queues work to Redis.
+
+    Attributes:
+        _client (Redis): Async Redis client.
+        _queue_name (str): Redis list name.
+    """
+
+    def __init__(self, client: Redis, queue_name: str) -> None:
+        """Creates the Redis queue adapter.
+
+        Args:
+            client (Redis): Async Redis client.
+            queue_name (str): Redis list name.
+
+        Returns:
+            None: The adapter is initialized in-place.
+        """
+
+        self._client = client
+        self._queue_name = queue_name
+
+    async def enqueue(self, task: QueuedTask) -> None:
+        """Queues a task in Redis.
+
+        Args:
+            task (QueuedTask): Task to enqueue.
+
+        Returns:
+            None: The serialized task is pushed to Redis.
+        """
+
+        await self._client.rpush(self._queue_name, task.to_message().model_dump_json())
+
+    async def ping(self) -> bool:
+        """Checks Redis availability.
+
+        Returns:
+            bool: True when Redis responds to PING.
+        """
+
+        try:
+            return bool(await self._client.ping())
+        except Exception:
+            return False
+
+    async def close(self) -> None:
+        """Closes the Redis client.
+
+        Returns:
+            None: Redis connections are closed in-place.
+        """
+
+        await self._client.aclose()
+
+
+class AzureStorageQueueTaskQueue:
+    """Queues work to Azure Storage Queue.
+
+    Attributes:
+        _client (QueueClient): Async Azure queue client.
+    """
+
+    def __init__(self, client: QueueClient) -> None:
+        """Creates the Azure queue adapter.
+
+        Args:
+            client (QueueClient): Async Azure queue client.
+
+        Returns:
+            None: The adapter is initialized in-place.
+        """
+
+        self._client = client
+
+    async def _create_queue_if_missing(self) -> None:
+        """Creates the target queue, tolerating a concurrent creator.
+
+        Azure Storage Queue does not auto-create queues on first write the
+        way Redis auto-creates lists on RPUSH, so a fresh deployment's queue
+        has to be provisioned lazily here instead of failing outright.
+
+        Returns:
+            None: The queue exists once this returns.
+        """
+
+        with contextlib.suppress(ResourceExistsError):
+            await self._client.create_queue()
+
+    async def enqueue(self, task: QueuedTask) -> None:
+        """Queues a task in Azure Storage Queue.
+
+        Args:
+            task (QueuedTask): Task to enqueue.
+
+        Returns:
+            None: The serialized task is sent to Azure Storage Queue.
+        """
+
+        message = task.to_message().model_dump_json()
+        try:
+            await self._client.send_message(message)
+        except ResourceNotFoundError:
+            await self._create_queue_if_missing()
+            await self._client.send_message(message)
+
+    async def ping(self) -> bool:
+        """Checks Azure Storage Queue availability.
+
+        Creates the target queue if it doesn't exist yet, so a fresh
+        deployment reports healthy instead of degraded before the first
+        task is ever dispatched.
+
+        Returns:
+            bool: True when the queue is reachable (and now provisioned).
+        """
+
+        try:
+            await self._client.get_queue_properties()
+            return True
+        except ResourceNotFoundError:
+            try:
+                await self._create_queue_if_missing()
+                return True
+            except Exception:
+                return False
+        except Exception:
+            return False
+
+    async def close(self) -> None:
+        """Closes the Azure queue client.
+
+        Returns:
+            None: Network resources are closed in-place.
+        """
+
+        await self._client.close()
+
+
+def create_task_queue(settings: Settings) -> TaskQueue:
+    """Builds the configured queue adapter.
+
+    Args:
+        settings (Settings): Runtime settings.
+
+    Returns:
+        TaskQueue: Configured task queue adapter.
+
+    Raises:
+        ValueError: If Azure queue configuration is incomplete.
+    """
+
+    if settings.queue_backend == "redis":
+        return RedisTaskQueue(
+            client=Redis.from_url(settings.redis_url),
+            queue_name=settings.queue_name,
+        )
+    if settings.queue_backend == "azure_storage_queue":
+        if settings.azure_storage_queue_connection_string is None:
+            msg = "{{ env_prefix }}AZURE_STORAGE_QUEUE_CONNECTION_STRING is required."
+            raise ValueError(msg)
+        return AzureStorageQueueTaskQueue(
+            client=QueueClient.from_connection_string(
+                conn_str=settings.azure_storage_queue_connection_string,
+                queue_name=settings.queue_name,
+            )
+        )
+    return InMemoryTaskQueue()

@@ -1,0 +1,86 @@
+name: Test template
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  render-and-verify:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include_example_endpoint: ["true", "false"]
+        python_version: ["3.12", "3.13"]
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: my_service
+          POSTGRES_PASSWORD: my_service
+          POSTGRES_DB: my_service_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U my_service"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      MY_SERVICE_TEST_DATABASE_URL: postgresql+asyncpg://my_service:my_service@localhost:5432/my_service_test
+      MY_SERVICE_TEST_REDIS_URL: redis://localhost:6379/1
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install ${{ matrix.python_version }}
+
+      - name: Install Copier
+        run: uv tool install copier
+
+      - name: Render template (include_example_endpoint=${{ matrix.include_example_endpoint }}, python_version=${{ matrix.python_version }})
+        run: |
+          uv tool run copier copy . /tmp/rendered \
+            --data package_name=my_service \
+            --data project_name="My Service" \
+            --data description="Generated for template CI verification." \
+            --data author_name="CI Runner" \
+            --data python_version=${{ matrix.python_version }} \
+            --data include_example_endpoint=${{ matrix.include_example_endpoint }} \
+            --defaults --trust --vcs-ref HEAD
+
+      - name: Install rendered project dependencies
+        working-directory: /tmp/rendered
+        run: uv sync
+
+      - name: Ruff check
+        working-directory: /tmp/rendered
+        run: uv run ruff check .
+
+      - name: Ruff format check
+        working-directory: /tmp/rendered
+        run: uv run ruff format --check .
+
+      - name: Type check
+        working-directory: /tmp/rendered
+        run: uv run ty check
+
+      - name: Run tests
+        working-directory: /tmp/rendered
+        run: uv run pytest

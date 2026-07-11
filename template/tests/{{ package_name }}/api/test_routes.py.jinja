@@ -1,0 +1,50 @@
+"""Tests for API routes."""
+
+from __future__ import annotations
+
+import pytest
+
+
+@pytest.mark.asyncio
+async def test_health_check_endpoint(client) -> None:
+    """Verifies the health endpoint.
+
+    Args:
+        client: Async test client.
+
+    Returns:
+        None: Assertions validate the endpoint response.
+    """
+
+    async with client.get("/health") as response:
+        payload = await response.json()
+
+        assert response.status == 200
+        assert payload["status"] == "ok"
+        assert payload["queue_backend"] == "memory"
+        assert payload["database_healthy"] is True
+
+
+@pytest.mark.asyncio
+async def test_dispatch_endpoint_accepts_long_running_tasks(client) -> None:
+    """Verifies the task dispatch endpoint.
+
+    Args:
+        client: Async test client.
+
+    Returns:
+        None: Assertions validate the endpoint response.
+    """
+
+    async with client.post(
+        "/tasks/dispatch",
+        json={
+            "scope": "billing",
+            "name": "reconcile-invoices",
+            "payload": {"batch": "2026-07-11"},
+        },
+    ) as response:
+        payload = await response.json()
+
+        assert response.status == 202
+        assert payload["scope"] == "billing"

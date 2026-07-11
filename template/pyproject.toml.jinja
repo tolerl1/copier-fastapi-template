@@ -1,0 +1,84 @@
+[project]
+name = "{{ package_slug }}"
+version = "0.1.0"
+description = "{{ description }}"
+readme = "README.md"
+requires-python = ">={{ python_version }}"
+dependencies = [
+    "fastapi[standard]>=0.116.1",
+    "uvicorn>=0.35.0",
+    "pydantic>=2.11.7",
+    "pydantic-settings>=2.10.1",
+    "sqlalchemy>=2.0.43",
+    "asyncpg>=0.30.0",
+    "alembic>=1.16.4",
+    "redis>=6.2.0",
+    "azure-storage-queue>=12.14.0",
+    "opentelemetry-api>=1.36.0",
+    "opentelemetry-sdk>=1.36.0",
+    "opentelemetry-exporter-otlp-proto-http>=1.36.0",
+    "opentelemetry-instrumentation-fastapi>=0.57b0",
+]
+
+[dependency-groups]
+dev = [
+    "aiohttp>=3.14.1",
+    "commitizen>=4.16.3",
+    "library-skills>=0.0.19",
+    "prek>=0.4.8",
+    "pytest>=8.4.1",
+    "pytest-asyncio>=1.1.0",
+    "pyupgrade>=3.20.0",
+    "ruff>=0.15.0",
+    "ty>=0.0.26",
+]
+
+[project.scripts]
+{{ package_slug }} = "{{ package_name }}.main:serve"
+
+[tool.fastapi]
+entrypoint = "{{ package_name }}.main:app"
+
+[build-system]
+requires = ["uv_build>=0.8.22,<0.9.0"]
+build-backend = "uv_build"
+
+[tool.uv]
+default-groups = ["dev"]
+
+[tool.ruff]
+line-length = 88
+target-version = "py{{ python_version.replace('.', '') }}"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "RUF", "SIM", "ASYNC", "FAST"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = ["S101"]
+
+[tool.ty.environment]
+python-version = "{{ python_version }}"
+
+[tool.ty.src]
+include = ["src", "tests"]
+
+[tool.ty.rules]
+all = "error"
+
+[tool.ty.terminal]
+error-on-warning = true
+
+[tool.pytest.ini_options]
+addopts = "-q --import-mode=importlib"
+asyncio_mode = "auto"
+pythonpath = ["src"]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+
+[tool.commitizen]
+name = "cz_conventional_commits"
+tag_format = "v$version"
+version_provider = "pep621"
+version_scheme = "semver2"
+update_changelog_on_bump = false

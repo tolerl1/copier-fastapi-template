@@ -1,0 +1,89 @@
+"""Dependency injection bootstrap for the application."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+from {{ package_name }}.api.models import ScopeDefinition, ScopeRegistry, TaskQueue
+from {{ package_name }}.api.services import HealthService, {% if include_example_endpoint %}ItemService, {% endif %}TaskDispatcher
+from {{ package_name }}.core.config import Settings
+from {{ package_name }}.database.queues import create_task_queue
+{% if include_example_endpoint %}
+from {{ package_name }}.database.repositories import SqlAlchemyItemRepository
+{% endif %}
+from {{ package_name }}.database.session import DatabaseSessionManager
+
+
+@dataclass(slots=True)
+class ServiceContainer:
+    """Stores dependency-injected services.
+
+    Attributes:
+        settings (Settings): Runtime settings.
+        session_manager (DatabaseSessionManager): Async SQLAlchemy session manager.
+        scope_registry (ScopeRegistry): Configured scope registry.
+        health_service (HealthService): Health application service.
+{% if include_example_endpoint %}
+        item_service (ItemService): Example item application service.
+{% endif %}
+        task_dispatcher (TaskDispatcher): Long-running task dispatcher.
+        task_queue (TaskQueue): Queue backend adapter.
+    """
+
+    settings: Settings
+    session_manager: DatabaseSessionManager
+    scope_registry: ScopeRegistry
+    health_service: HealthService
+{% if include_example_endpoint %}
+    item_service: ItemService
+{% endif %}
+    task_dispatcher: TaskDispatcher
+    task_queue: TaskQueue
+
+    async def shutdown(self) -> None:
+        """Releases container resources.
+
+        Returns:
+            None: Queue and database resources are released in-place.
+        """
+
+        await self.task_queue.close()
+        await self.session_manager.dispose()
+
+
+def build_container(settings: Settings | None = None) -> ServiceContainer:
+    """Builds the application service container.
+
+    Args:
+        settings (Settings | None): Optional runtime settings override.
+
+    Returns:
+        ServiceContainer: Initialized service container.
+    """
+
+    resolved_settings = settings or Settings()
+    scope_registry = ScopeRegistry(
+        [
+            ScopeDefinition(name=scope.name, description=scope.description)
+            for scope in resolved_settings.scopes
+        ]
+    )
+    session_manager = DatabaseSessionManager(resolved_settings.database_url)
+    task_queue = create_task_queue(resolved_settings)
+    return ServiceContainer(
+        settings=resolved_settings,
+        session_manager=session_manager,
+        scope_registry=scope_registry,
+        health_service=HealthService(
+            resolved_settings, task_queue, scope_registry, session_manager
+        ),
+{% if include_example_endpoint %}
+        item_service=ItemService(SqlAlchemyItemRepository()),
+{% endif %}
+        task_dispatcher=TaskDispatcher(
+            queue=task_queue,
+            queue_backend=resolved_settings.queue_backend,
+            scope_registry=scope_registry,
+        ),
+        task_queue=task_queue,
+    )

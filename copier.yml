@@ -1,0 +1,111 @@
+_subdirectory: template
+_min_copier_version: "9.0.0"
+_envops:
+  trim_blocks: true
+  lstrip_blocks: true
+
+_message_after_copy: |
+  Project generated in {{ _copier_conf.dst_path }}.
+
+  Next steps:
+    cd {{ _copier_conf.dst_path }}
+    cp .env.example .env
+    uv sync
+    docker compose up -d db redis
+    uv run alembic upgrade head
+    uv run {{ package_slug }}
+
+  Then install git hooks:
+    uv tool install prek
+    prek install -t pre-commit -t commit-msg -t pre-push
+
+  Generation ran `uv lock` and `ruff format`/`ruff check --fix` for you.
+  If this machine had no network access those steps silently no-op'd — `uv
+  sync` above will still create `uv.lock` (needed before `docker compose up
+  --build` or CI's `uv sync --locked` will work), and `uv run ruff format .`
+  will still normalize formatting.
+
+package_name:
+  type: str
+  help: >-
+    Python package / import name (snake_case). Used for the src/tests
+    package directory, module imports, the Postgres user/db name, and the
+    FASTAPI_TEMPLATE-style settings env var prefix.
+  default: my_service
+  validator: >-
+    {% if not (package_name | regex_search('^[a-z][a-z0-9_]*$')) %}
+    Package name must be a valid lowercase Python identifier: start with a
+    letter, then letters, digits, or underscores only (no hyphens).
+    {% endif %}
+    {% if package_name in ["and", "as", "assert", "async", "await", "break",
+        "class", "continue", "def", "del", "elif", "else", "except",
+        "finally", "for", "from", "global", "if", "import", "in", "is",
+        "lambda", "nonlocal", "not", "or", "pass", "raise", "return", "try",
+        "while", "with", "yield", "test", "tests", "src"] %}
+    Package name must not be a Python keyword or a reserved directory name.
+    {% endif %}
+
+project_name:
+  type: str
+  help: Human-readable application name (used as the FastAPI title and in docs).
+  default: "{{ package_name.replace('_', ' ').title() }}"
+
+description:
+  type: str
+  help: One-line project description (used in pyproject.toml and the README).
+  default: FastAPI microservice generated from copier-fastapi-template.
+
+author_name:
+  type: str
+  help: Author or organization name (used in LICENSE).
+  default: Your Name
+
+python_version:
+  type: str
+  help: Python version to target.
+  choices:
+    "3.12": "3.12"
+    "3.13": "3.13"
+  default: "3.12"
+
+include_example_endpoint:
+  type: bool
+  help: >-
+    Include the example /items endpoint (ItemModel/ItemService/repository)
+    demonstrating the request -> service -> repository -> DB pattern? Leave
+    this off to start from a clean slate with no example domain code.
+  default: false
+
+package_slug:
+  type: str
+  when: false
+  default: "{{ package_name.replace('_', '-') }}"
+
+env_prefix:
+  type: str
+  when: false
+  default: "{{ package_name.upper() }}_"
+
+license_year:
+  type: str
+  when: false
+  default: "2026"
+
+_exclude:
+  - "copier.yml"
+  - "copier.yaml"
+  - "~*"
+  - "*.py[co]"
+  - "__pycache__"
+  - ".git"
+  - "{% if not include_example_endpoint %}src/{{ package_name }}/database/repositories.py{% endif %}"
+  - "{% if not include_example_endpoint %}tests/{{ package_name }}/api/test_items.py{% endif %}"
+  - "{% if not include_example_endpoint %}tests/{{ package_name }}/database/test_repositories.py{% endif %}"
+  - "{% if not include_example_endpoint %}alembic/versions/0001_create_items_table.py{% endif %}"
+
+_tasks:
+  - command: "git init"
+  - command: "uv lock || true"
+  - command: "uvx ruff format . || true"
+  - command: "uvx ruff check --fix --exit-zero . || true"
+  - command: "rm -rf .ruff_cache"

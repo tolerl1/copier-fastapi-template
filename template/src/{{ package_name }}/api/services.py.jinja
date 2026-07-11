@@ -1,0 +1,234 @@
+"""Application services for domain operations."""
+
+from __future__ import annotations
+
+import asyncio
+import logging
+
+{% if include_example_endpoint %}
+from sqlalchemy.ext.asyncio import AsyncSession
+
+{% endif %}
+from {{ package_name }}.api.models import (
+    ScopeRegistry,
+    TaskQueue,
+    UnknownScopeError,
+    build_task,
+)
+from {{ package_name }}.api.schemas import (
+    DispatchTaskRequest,
+    DispatchTaskResponse,
+    HealthDTO,
+{% if include_example_endpoint %}
+    ItemDTO,
+    PaginatedItemsDTO,
+{% endif %}
+)
+from {{ package_name }}.core.config import Settings
+from {{ package_name }}.core.logging import TRACE_LEVEL
+{% if include_example_endpoint %}
+from {{ package_name }}.database.repositories import SqlAlchemyItemRepository
+{% endif %}
+from {{ package_name }}.database.session import DatabaseSessionManager
+
+LOGGER = logging.getLogger(__name__)
+
+
+class HealthService:
+    """Builds liveness and readiness responses.
+
+    Attributes:
+        _settings (Settings): Runtime settings.
+        _queue (TaskQueue): Queue backend abstraction.
+        _scope_registry (ScopeRegistry): Configured scope registry.
+        _session_manager (DatabaseSessionManager): Async SQLAlchemy session manager.
+    """
+
+    def __init__(
+        self,
+        settings: Settings,
+        queue: TaskQueue,
+        scope_registry: ScopeRegistry,
+        session_manager: DatabaseSessionManager,
+    ) -> None:
+        """Creates the health service.
+
+        Args:
+            settings (Settings): Runtime settings.
+            queue (TaskQueue): Queue backend abstraction.
+            scope_registry (ScopeRegistry): Configured scope registry.
+            session_manager (DatabaseSessionManager): Async SQLAlchemy session manager.
+
+        Returns:
+            None: The service is initialized in-place.
+        """
+
+        self._settings = settings
+        self._queue = queue
+        self._scope_registry = scope_registry
+        self._session_manager = session_manager
+
+    async def _check_queue(self) -> bool:
+        """Checks queue reachability.
+
+        Returns:
+            bool: True when the queue backend responds.
+        """
+
+        try:
+            return await self._queue.ping()
+        except Exception:
+            return False
+
+    async def _check_database(self) -> bool:
+        """Checks database reachability via a pooled connection checkout.
+
+        A bare connection checkout is sufficient: `pool_pre_ping` already
+        validates reused pooled connections, and creating a brand-new
+        connection requires a real round trip to the database, so no
+        separate query is needed to prove liveness.
+
+        Returns:
+            bool: True when a connection can be established.
+        """
+
+        try:
+            async with self._session_manager.engine.connect():
+                pass
+            return True
+        except Exception:
+            return False
+
+    async def read(self) -> HealthDTO:
+        """Builds the health response.
+
+        Returns:
+            HealthDTO: Current health snapshot.
+        """
+
+        queue_healthy, database_healthy = await asyncio.gather(
+            self._check_queue(), self._check_database()
+        )
+        status = "ok" if queue_healthy and database_healthy else "degraded"
+        return HealthDTO(
+            status=status,
+            queue_backend=self._settings.queue_backend,
+            queue_healthy=queue_healthy,
+            database_healthy=database_healthy,
+            telemetry_enabled=self._settings.telemetry_enabled,
+            scope_count=len(self._scope_registry.list()),
+        )
+
+
+{% if include_example_endpoint %}
+class ItemService:
+    """Example service for listing items.
+
+    This is a template service demonstrating how to back a paginated endpoint
+    with a repository and a request-scoped database session.
+
+    Attributes:
+        _repository (SqlAlchemyItemRepository): Item repository.
+    """
+
+    def __init__(self, repository: SqlAlchemyItemRepository) -> None:
+        """Creates the item service.
+
+        Args:
+            repository (SqlAlchemyItemRepository): Item repository.
+
+        Returns:
+            None: The service is initialized in-place.
+        """
+
+        self._repository = repository
+
+    async def page(
+        self, session: AsyncSession, page: int, page_size: int
+    ) -> PaginatedItemsDTO:
+        """Builds a paginated item response.
+
+        Args:
+            session (AsyncSession): Request-scoped database session.
+            page (int): One-based page number.
+            page_size (int): Requested page size.
+
+        Returns:
+            PaginatedItemsDTO: Paginated item response.
+        """
+
+        offset = (page - 1) * page_size
+        items = await self._repository.list_items(
+            session, offset=offset, limit=page_size
+        )
+        total = await self._repository.count_items(session)
+        return PaginatedItemsDTO(
+            items=[ItemDTO.from_item(item) for item in items],
+            page=page,
+            page_size=page_size,
+            total=total,
+        )
+
+
+{% endif %}
+class TaskDispatcher:
+    """Queues long-running work to the configured backend.
+
+    Attributes:
+        _queue (TaskQueue): Queue backend abstraction.
+        _queue_backend (str): Queue backend name.
+        _scope_registry (ScopeRegistry): Configured scope registry.
+    """
+
+    def __init__(
+        self,
+        queue: TaskQueue,
+        queue_backend: str,
+        scope_registry: ScopeRegistry,
+    ) -> None:
+        """Creates the task dispatcher.
+
+        Args:
+            queue (TaskQueue): Queue backend abstraction.
+            queue_backend (str): Queue backend name.
+            scope_registry (ScopeRegistry): Configured scope registry.
+
+        Returns:
+            None: The dispatcher is initialized in-place.
+        """
+
+        self._queue = queue
+        self._queue_backend = queue_backend
+        self._scope_registry = scope_registry
+
+    async def dispatch(self, request: DispatchTaskRequest) -> DispatchTaskResponse:
+        """Queues a long-running task.
+
+        Args:
+            request (DispatchTaskRequest): Task request.
+
+        Returns:
+            DispatchTaskResponse: Queued task response.
+
+        Raises:
+            UnknownScopeError: If the target scope is not registered.
+        """
+
+        if not self._scope_registry.has(request.scope):
+            msg = f"Unknown scope: {request.scope}"
+            raise UnknownScopeError(msg)
+        task = build_task(request.scope, request.name, request.payload)
+        LOGGER.log(
+            TRACE_LEVEL,
+            "Dispatching task %s to %s for scope %s",
+            task.task_id,
+            self._queue_backend,
+            task.scope,
+        )
+        await self._queue.enqueue(task)
+        return DispatchTaskResponse(
+            task_id=task.task_id,
+            scope=task.scope,
+            name=task.name,
+            queue_backend=self._queue_backend,
+        )

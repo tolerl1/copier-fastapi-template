@@ -1,0 +1,47 @@
+"""Integration tests for queue backends against a real Redis instance."""
+
+from __future__ import annotations
+
+import pytest
+from redis.asyncio import Redis
+from tests.conftest import TEST_REDIS_URL
+
+from {{ package_name }}.api.models import build_task
+from {{ package_name }}.core.config import Settings
+from {{ package_name }}.database.queues import create_task_queue
+
+
+@pytest.mark.asyncio
+async def test_redis_task_queue_enqueues_and_pings() -> None:
+    """Verifies the Redis queue adapter enqueues tasks against a real Redis.
+
+    Returns:
+        None: Assertions validate Redis queue behavior end to end.
+    """
+
+    queue_name = "{{ package_slug }}-test-queue"
+    queue = create_task_queue(
+        Settings(
+            queue_backend="redis",
+            redis_url=TEST_REDIS_URL,
+            queue_name=queue_name,
+        )
+    )
+
+    client = Redis.from_url(TEST_REDIS_URL)
+    await client.delete(queue_name)
+
+    try:
+        assert await queue.ping() is True
+
+        task = build_task(scope="platform", name="rebuild-read-model", payload={})
+        await queue.enqueue(task)
+
+        assert await client.llen(queue_name) == 1
+        message = await client.lpop(queue_name)
+        assert isinstance(message, bytes)
+        assert task.task_id in message.decode()
+    finally:
+        await client.delete(queue_name)
+        await client.aclose()
+        await queue.close()

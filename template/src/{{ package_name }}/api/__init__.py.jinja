@@ -1,0 +1,9 @@
+"""API package: domain models, DTOs, services, and dependency injection.
+
+Keep this module free of re-exports. `api.dependencies` imports
+`{{ package_name }}.bootstrap.ServiceContainer` at module scope, and
+`bootstrap` imports `{{ package_name }}.api.models`, which requires this
+package's `__init__` to finish executing first. Re-exporting anything from
+`api.dependencies` here reintroduces that import cycle (see
+tests/{{ package_name }}/test_import_order.py).
+"""

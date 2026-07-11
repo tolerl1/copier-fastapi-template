@@ -1,0 +1,47 @@
+"""SQLAlchemy repository adapters."""
+
+from __future__ import annotations
+
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from {{ package_name }}.api.models import Item
+from {{ package_name }}.database.session import ItemModel
+
+
+class SqlAlchemyItemRepository:
+    """Loads example items from SQLAlchemy ORM models."""
+
+    async def list_items(
+        self, session: AsyncSession, offset: int, limit: int
+    ) -> tuple[Item, ...]:
+        """Lists a page of persisted items.
+
+        Args:
+            session (AsyncSession): Active request-scoped session.
+            offset (int): Number of leading rows to skip.
+            limit (int): Maximum number of rows to return.
+
+        Returns:
+            tuple[Item, ...]: Persisted items ordered by id.
+        """
+
+        result = await session.scalars(
+            select(ItemModel).order_by(ItemModel.id).offset(offset).limit(limit)
+        )
+        return tuple(
+            Item(id=str(model.id), name=model.name, description=model.description)
+            for model in result
+        )
+
+    async def count_items(self, session: AsyncSession) -> int:
+        """Counts persisted items.
+
+        Args:
+            session (AsyncSession): Active request-scoped session.
+
+        Returns:
+            int: Total number of persisted items.
+        """
+
+        return await session.scalar(select(func.count()).select_from(ItemModel)) or 0
