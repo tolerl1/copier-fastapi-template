@@ -6,6 +6,9 @@
 - Add or update scopes through `Settings.scopes` and `ScopeRegistry`.
 - Keep request handlers non-blocking and move long-running work to the configured queue backend.
 - `azure-storage-queue` is an optional dependency (the `azure` extra); `database/queues.py` imports it lazily. Don't move that import back to module scope.
+{% if enable_azure_auth -%}
+- This service is a resource server for Azure Entra ID: `core/auth.py` builds a module-level `azure_scheme`. Depend on `CurrentUserDep` for "any valid caller" and `require_role("X")` (see `require_admin_role`) for app-role checks — don't hand-roll JWT parsing. Tests override `azure_scheme` via `app.dependency_overrides`, never real tokens.
+{% endif -%}
 - Maintain Google-style docstrings with explicit types.
 {% if enable_telemetry -%}
 - Keep tracing enabled through `core/telemetry.py` and trace-aware logging through `core/logging.py`.

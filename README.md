@@ -38,6 +38,7 @@ Copier will prompt for:
 | `python_version` | `3.12` or `3.13`. Drives `requires-python`, the Dockerfile base image, `ruff`'s `target-version`, and `pyright`'s environment. |
 | `include_example_endpoint` | Off by default. Turn it on to keep the `/items` example (`ItemModel` → `SqlAlchemyItemRepository` → `ItemService` → route) that demonstrates the request/service/repository/DB pattern. Off means a clean project with no example domain code to delete by hand. |
 | `enable_telemetry` | On by default. Wires up OpenTelemetry (tracer provider, OTLP/console exporter, FastAPI instrumentation, trace IDs in log lines) and the four `opentelemetry-*` dependencies. Off drops `core/telemetry.py` and those dependencies entirely for services that don't run a collector. |
+| `enable_azure_auth` | Off by default. Adds `fastapi-azure-auth` and `core/auth.py`: a single-tenant Azure Entra ID JWT-validation dependency (`azure_scheme`), a `require_role(...)` app-role helper, and an example `/auth/me` + `/auth/admin` router. Requires an Entra ID app registration — see the generated project's own README for setup. |
 
 `package_slug` (hyphenated form of `package_name`, used for the `pyproject.toml`
 `name` and the `[project.scripts]` entry) and `env_prefix` are derived
@@ -53,7 +54,8 @@ copier copy gh:tolerl1/copier-fastapi-template path/to/new-project \
   --data author_name="Your Name" \
   --data python_version=3.12 \
   --data include_example_endpoint=false \
-  --data enable_telemetry=true
+  --data enable_telemetry=true \
+  --data enable_azure_auth=false
 ```
 
 ### After generating
@@ -143,14 +145,18 @@ above it is about maintaining the template itself.
 
 ## Verifying changes to this template
 
-`.github/workflows/test-template.yml` renders the template across a matrix of
-`include_example_endpoint`, `enable_telemetry`, and `python_version` against
-real Postgres and Redis service containers, then runs `ruff check`,
+`.github/workflows/test-template.yml` has two jobs. `render-and-verify` renders
+the template across a matrix of `include_example_endpoint`, `enable_telemetry`,
+and `python_version` (with `enable_azure_auth=false`, the default) against real
+Postgres and Redis service containers, then runs `ruff check`,
 `ruff format --check`, `pyright`, and `pytest` inside each rendered project (a
 session-scoped fixture in the rendered project's own `tests/conftest.py`
 applies Alembic migrations to the test database automatically — no separate
-migration step is needed). Run the same steps locally before pushing template
-changes:
+migration step is needed). `render-and-verify-azure-auth` does the same for a
+single `enable_azure_auth=true` render (not matrixed, since it doesn't
+validate real tokens — `tests/.../test_auth.py` overrides `azure_scheme`
+instead of hitting Entra ID — so there's nothing further to vary per
+combination). Run the same steps locally before pushing template changes:
 
 ```bash
 uv tool install copier
@@ -164,3 +170,9 @@ uv run ruff check . && uv run ruff format --check . && uv run pyright
 docker compose up -d db redis   # or point *_TEST_DATABASE_URL / *_TEST_REDIS_URL elsewhere
 uv run pytest
 ```
+
+For an `enable_azure_auth=true` render, also set placeholder
+`MY_SERVICE_AZURE_TENANT_ID` / `MY_SERVICE_AZURE_CLIENT_ID` env vars before
+`uv run pytest` — `core/auth.py` builds its `azure_scheme` singleton at
+import time, so `Settings()` needs them even though the tests never validate
+a real token.

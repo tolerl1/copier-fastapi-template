@@ -1,7 +1,7 @@
 # GitHub Copilot Instructions
 
 - Use `uv` for dependency management, virtual environments, and command execution.
-- Preserve the layering: `api` (models, schemas, services, dependencies), `core` (config, logging{% if enable_telemetry %}, telemetry{% endif %}), `database` (session, queues{% if include_example_endpoint %}, repositories{% endif %}), and `routes`.
+- Preserve the layering: `api` (models, schemas, services, dependencies), `core` (config, logging{% if enable_telemetry %}, telemetry{% endif %}{% if enable_azure_auth %}, auth{% endif %}), `database` (session, queues{% if include_example_endpoint %}, repositories{% endif %}), and `routes`.
 - Keep all HTTP handlers asynchronous.
 - Use SQLAlchemy ORM with `asyncpg`; do not introduce synchronous database access.
 - Add Google-style docstrings with explicit types for attributes, arguments, and returns.
@@ -11,6 +11,9 @@
 - Keep tracing and logging wired through OpenTelemetry-aware helpers in `src/{{ package_name }}/core`.
 {% else -%}
 - OpenTelemetry is disabled for this project; logging still carries correlation IDs but not trace/span IDs.
+{% endif -%}
+{% if enable_azure_auth -%}
+- Azure Entra ID protects this API: `core/auth.py` exposes a module-level `azure_scheme` JWT-validation dependency, `CurrentUserDep` (any valid caller), and `require_role("X")` (app-role gated). Don't parse tokens by hand and don't call `azure_scheme` with real tokens in tests — override it via `app.dependency_overrides`.
 {% endif -%}
 - Type-check with `pyright`, not mypy or `ty`.
 - Refresh `.agents/skills` and `.claude/skills` with `uv run library-skills --tool-skill install --claude --yes --all` when dependencies change.

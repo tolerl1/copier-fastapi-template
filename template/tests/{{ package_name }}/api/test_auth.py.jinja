@@ -1,0 +1,105 @@
+"""Tests for Azure Entra ID auth: JWT validation dependency and role checks.
+
+These override `azure_scheme` via `app.dependency_overrides` rather than
+exercising real JWT validation — `azure_scheme.__call__` needs live network
+access to Entra ID's signing keys, which isn't something a unit test suite
+should depend on. Validate the real thing against a real Entra ID tenant in
+a manual/integration pass instead.
+"""
+
+from __future__ import annotations
+
+import time
+
+import pytest
+from fastapi_azure_auth.user import User
+
+from {{ package_name }}.core.auth import azure_scheme
+
+
+def _build_user(roles: list[str]) -> User:
+    """Builds a fake validated Entra ID user for dependency overrides in tests.
+
+    Args:
+        roles (list[str]): App roles to grant the fake caller.
+
+    Returns:
+        User: Fake user with a well-formed but non-real token payload.
+    """
+
+    now = int(time.time())
+    claims = {
+        "aud": "test-client-id",
+        "iss": "https://login.microsoftonline.com/test-tenant/v2.0",
+        "iat": now,
+        "nbf": now,
+        "exp": now + 3600,
+        "sub": "test-subject",
+        "oid": "test-object-id",
+        "name": "Test User",
+        "preferred_username": "test.user@example.com",
+        "ver": "2.0",
+        "roles": roles,
+    }
+    return User(**claims, claims=claims, access_token="test-token")
+
+
+@pytest.mark.asyncio
+async def test_me_returns_authenticated_caller(app, client) -> None:
+    """Verifies /auth/me returns the caller resolved by azure_scheme.
+
+    Args:
+        app: Test FastAPI application.
+        client: Async test client.
+
+    Returns:
+        None: Assertions validate the endpoint response.
+    """
+
+    app.dependency_overrides[azure_scheme] = lambda: _build_user(roles=[])
+
+    async with client.get("/auth/me") as response:
+        payload = await response.json()
+
+        assert response.status == 200
+        assert payload["oid"] == "test-object-id"
+        assert payload["roles"] == []
+
+
+@pytest.mark.asyncio
+async def test_admin_route_rejects_caller_without_admin_role(app, client) -> None:
+    """Verifies /auth/admin 403s for a caller without the Admin role.
+
+    Args:
+        app: Test FastAPI application.
+        client: Async test client.
+
+    Returns:
+        None: Assertions validate the endpoint response.
+    """
+
+    app.dependency_overrides[azure_scheme] = lambda: _build_user(roles=["Viewer"])
+
+    async with client.get("/auth/admin") as response:
+        assert response.status == 403
+
+
+@pytest.mark.asyncio
+async def test_admin_route_accepts_caller_with_admin_role(app, client) -> None:
+    """Verifies /auth/admin succeeds for a caller with the Admin role.
+
+    Args:
+        app: Test FastAPI application.
+        client: Async test client.
+
+    Returns:
+        None: Assertions validate the endpoint response.
+    """
+
+    app.dependency_overrides[azure_scheme] = lambda: _build_user(roles=["Admin"])
+
+    async with client.get("/auth/admin") as response:
+        payload = await response.json()
+
+        assert response.status == 200
+        assert payload["roles"] == ["Admin"]
