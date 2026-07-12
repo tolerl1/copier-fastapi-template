@@ -11,5 +11,5 @@
 - `container.py` defines the `ServiceContainer` shape (no runtime service imports); `bootstrap.py` builds one. Don't import `bootstrap` from request-time code — import `container` instead.
 - `azure-storage-queue` is optional (`uv sync --extra azure`); don't hard-import it at module scope in `database/queues.py`.
 {% if enable_azure_auth -%}
-- Azure Entra ID auth: `core/auth.py` builds a module-level `azure_scheme` (JWT validation). Use `CurrentUserDep` for "any authenticated caller" and `require_role("X")` for app-role-gated routes. Never hand-roll token parsing; never call `azure_scheme` with real tokens in tests — override it via `app.dependency_overrides` instead.
+- Azure Entra ID auth: `core/auth.py` builds a module-level `azure_scheme` (JWT validation). Use `CurrentUserDep` for "any authenticated caller" and `require_role("X")` for app-role-gated routes. `require_role` wires `azure_scheme` to the provider-agnostic `check_role(role, user)` (assumes only `user.roles`); a non-Entra provider later reuses `check_role` with its own identity dependency. Never hand-roll token parsing; never call `azure_scheme` with real tokens in tests — override it via `app.dependency_overrides` instead.
 {% endif -%}

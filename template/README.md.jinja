@@ -292,7 +292,11 @@ against Entra ID themselves and send the resulting access token as
 - `require_role("SomeRole")` (in `core/auth.py`) builds a dependency that
   also 403s callers missing that Entra ID app role. `require_admin_role` is
   a ready-made example (`GET /auth/admin`); add more the same way for your
-  own roles.
+  own roles. `require_role` is just `azure_scheme` wired to
+  `check_role(role, user)`, a provider-agnostic role check that only
+  assumes `user.roles` — swapping in another JWT-based provider (e.g. AWS
+  Cognito, Sign in with Apple) later means writing a new identity-resolution
+  dependency to replace `azure_scheme`; `check_role` keeps working as-is.
 - `azure_scheme` validates the token's signature (against Entra ID's
   published signing keys, fetched and cached automatically), issuer,
   audience, and expiry on every call — there's nothing else to wire up per
