@@ -4,37 +4,86 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from datetime import datetime
+{% if use_uuid_primary_keys %}
+from uuid import UUID
+{% endif %}
 
+from sqlalchemy import MetaData, func
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
     async_sessionmaker,
     create_async_engine,
 )
-{% if include_example_endpoint %}
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
-{% else %}
-from sqlalchemy.orm import DeclarativeBase
+{% if use_uuid_primary_keys %}
+from sqlalchemy.dialects.postgresql import UUID as PGUUID
+from uuid_utils.compat import uuid7
 {% endif %}
+
+NAMING_CONVENTION = {
+    "ix": "ix_%(column_0_label)s",
+    "uq": "uq_%(table_name)s_%(column_0_name)s",
+    "ck": "ck_%(table_name)s_%(constraint_name)s",
+    "fk": "fk_%(table_name)s_%(column_0_name)s_%(referred_table_name)s",
+    "pk": "pk_%(table_name)s",
+}
 
 
 class Base(DeclarativeBase):
     """Declarative base for ORM models."""
 
+    metadata = MetaData(naming_convention=NAMING_CONVENTION)
+
+
+class TimestampMixin:
+    """Adds database-populated creation/update timestamps to a model.
+
+    Attributes:
+        created_at (datetime): Row creation timestamp, set by the database.
+        updated_at (datetime): Row last-update timestamp, set by the database.
+    """
+
+    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        server_default=func.now(), onupdate=func.now()
+    )
+
+{% if use_uuid_primary_keys %}
+
+class UUIDPrimaryKeyMixin:
+    """Adds a UUIDv7 primary key generated client-side.
+
+    UUIDv7 embeds a millisecond timestamp, so IDs sort roughly by creation
+    order. That keeps B-tree inserts append-mostly, unlike random (v4)
+    UUIDs, which scatter inserts across the index and fragment it.
+
+    Attributes:
+        id (UUID): Primary key.
+    """
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid7
+    )
+{% endif %}
+
 
 {% if include_example_endpoint %}
-class ItemModel(Base):
+class ItemModel({% if use_uuid_primary_keys %}UUIDPrimaryKeyMixin, {% endif %}Base):
     """Persists example items for the `/items` endpoint.
 
     Attributes:
-        id (int): Database primary key.
+        id ({% if use_uuid_primary_keys %}UUID{% else %}int{% endif %}): Database primary key.
         name (str): Item name.
         description (str): Item description.
     """
 
     __tablename__ = "items"
 
+{% if not use_uuid_primary_keys %}
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+{% endif %}
     name: Mapped[str]
     description: Mapped[str]
 
@@ -48,17 +97,31 @@ class DatabaseSessionManager:
         _session_factory (async_sessionmaker[AsyncSession]): Session factory.
     """
 
-    def __init__(self, database_url: str) -> None:
+    def __init__(
+        self,
+        database_url: str,
+        *,
+        pool_size: int = 5,
+        max_overflow: int = 10,
+    ) -> None:
         """Creates the session manager.
 
         Args:
             database_url (str): Async database URL.
+            pool_size (int): Persistent connections kept per worker.
+            max_overflow (int): Extra connections allowed beyond `pool_size`
+                under load.
 
         Returns:
             None: The manager is initialized in-place.
         """
 
-        self._engine = create_async_engine(database_url, pool_pre_ping=True)
+        self._engine = create_async_engine(
+            database_url,
+            pool_pre_ping=True,
+            pool_size=pool_size,
+            max_overflow=max_overflow,
+        )
         self._session_factory = async_sessionmaker(self._engine, expire_on_commit=False)
 
     @property

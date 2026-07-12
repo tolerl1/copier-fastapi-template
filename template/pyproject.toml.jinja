@@ -13,6 +13,9 @@ dependencies = [
     "asyncpg>=0.30.0",
     "alembic>=1.16.4",
     "redis>=6.2.0",
+{% if use_uuid_primary_keys %}
+    "uuid-utils>=0.10.0",
+{% endif %}
 {% if enable_telemetry %}
     "opentelemetry-api>=1.36.0",
     "opentelemetry-sdk>=1.36.0",

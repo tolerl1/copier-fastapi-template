@@ -76,6 +76,18 @@ include_example_endpoint:
     this off to start from a clean slate with no example domain code.
   default: false
 
+use_uuid_primary_keys:
+  type: bool
+  help: >-
+    Use UUIDv7 primary keys (time-ordered, generated client-side via the
+    Rust-backed uuid-utils library) instead of auto-incrementing integers?
+    UUIDv7 keeps B-tree index inserts roughly sequential, unlike random
+    (v4) UUIDs. Adds a UUIDPrimaryKeyMixin for new models and switches the
+    example /items table to a UUID id column. Off by default since integer
+    PKs are smaller and simpler for services that don't need
+    globally-unique, client-generatable IDs.
+  default: false
+
 enable_telemetry:
   type: bool
   help: >-
@@ -120,7 +132,7 @@ _exclude:
   - "{% if not include_example_endpoint %}src/{{ package_name }}/database/repositories.py{% endif %}"
   - "{% if not include_example_endpoint %}tests/{{ package_name }}/api/test_items.py{% endif %}"
   - "{% if not include_example_endpoint %}tests/{{ package_name }}/database/test_repositories.py{% endif %}"
-  - "{% if not include_example_endpoint %}alembic/versions/0001_create_items_table.py{% endif %}"
+  - "{% if not include_example_endpoint %}alembic/versions/0001_create_items_table.py.jinja{% endif %}"
   - "{% if not enable_telemetry %}src/{{ package_name }}/core/telemetry.py{% endif %}"
   - "{% if not enable_azure_auth %}src/{{ package_name }}/core/auth.py{% endif %}"
   - "{% if not enable_azure_auth %}tests/{{ package_name }}/api/test_auth.py{% endif %}"

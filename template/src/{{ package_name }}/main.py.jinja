@@ -9,6 +9,7 @@ import uvicorn
 from fastapi import FastAPI
 
 from {{ package_name }}.bootstrap import build_container
+from {{ package_name }}.container import ContainerState
 from {{ package_name }}.core.config import Settings
 from {{ package_name }}.core.correlation import CorrelationIdMiddleware
 from {{ package_name }}.core.logging import configure_logging
@@ -16,21 +17,6 @@ from {{ package_name }}.core.logging import configure_logging
 from {{ package_name }}.core.telemetry import configure_telemetry
 {% endif %}
 from {{ package_name }}.routes.router import router
-
-
-@asynccontextmanager
-async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-    """Manages startup and shutdown resources.
-
-    Args:
-        app (FastAPI): FastAPI application.
-
-    Returns:
-        AsyncIterator[None]: Lifespan context manager.
-    """
-
-    yield
-    await app.state.container.shutdown()
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -45,6 +31,22 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     resolved_settings = settings or Settings()
     configure_logging(resolved_settings.log_level)
+
+    @asynccontextmanager
+    async def lifespan(app: FastAPI) -> AsyncIterator[ContainerState]:
+        """Builds and tears down the service container around the app's life.
+
+        Args:
+            app (FastAPI): FastAPI application.
+
+        Returns:
+            AsyncIterator[ContainerState]: State merged into `request.state`.
+        """
+
+        container = build_container(resolved_settings)
+        yield {"container": container}
+        await container.shutdown()
+
     app = FastAPI(
         title=resolved_settings.app_name,
         lifespan=lifespan,
@@ -57,7 +59,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         },
 {% endif %}
     )
-    app.state.container = build_container(resolved_settings)
     app.add_middleware(CorrelationIdMiddleware)
     app.include_router(router)
 {% if enable_telemetry %}
@@ -76,7 +77,7 @@ def serve() -> None:
         None: Uvicorn is started in-process.
     """
 
-    settings = app.state.container.settings
+    settings = Settings()
     uvicorn.run(
         "{{ package_name }}.main:app",
         host=settings.host,

@@ -9,6 +9,10 @@ from __future__ import annotations
 
 import sqlalchemy as sa
 from alembic import op
+{% if use_uuid_primary_keys %}
+from sqlalchemy.dialects.postgresql import UUID
+from uuid_utils.compat import uuid7
+{% endif %}
 
 revision = "0001"
 down_revision = None
@@ -16,9 +20,15 @@ branch_labels = None
 depends_on = None
 
 _EXAMPLE_ITEMS = [
+{% if use_uuid_primary_keys %}
+    {"id": uuid7(), "name": "Example Item 1", "description": "First example item"},
+    {"id": uuid7(), "name": "Example Item 2", "description": "Second example item"},
+    {"id": uuid7(), "name": "Example Item 3", "description": "Third example item"},
+{% else %}
     {"name": "Example Item 1", "description": "First example item"},
     {"name": "Example Item 2", "description": "Second example item"},
     {"name": "Example Item 3", "description": "Third example item"},
+{% endif %}
 ]
 
 
@@ -31,7 +41,11 @@ def upgrade() -> None:
 
     items_table = op.create_table(
         "items",
+{% if use_uuid_primary_keys %}
+        sa.Column("id", UUID(as_uuid=True), primary_key=True),
+{% else %}
         sa.Column("id", sa.Integer(), primary_key=True, autoincrement=True),
+{% endif %}
         sa.Column("name", sa.String(), nullable=False),
         sa.Column("description", sa.String(), nullable=False),
     )
