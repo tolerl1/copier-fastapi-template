@@ -11,8 +11,8 @@ from fastapi_azure_auth.user import User
 {% endif %}
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from {{ package_name }}.api.models import UnknownScopeError
-from {{ package_name }}.api.services import HealthService, {% if include_example_endpoint %}ItemService, {% endif %}TaskDispatcher
+from {{ package_name }}.application.models import UnknownScopeError
+from {{ package_name }}.application.services import HealthService, {% if include_example_endpoint %}ItemService, {% endif %}TaskDispatcher
 {% if enable_azure_auth %}
 from {{ package_name }}.core.auth import get_current_user, require_admin_role
 {% endif %}

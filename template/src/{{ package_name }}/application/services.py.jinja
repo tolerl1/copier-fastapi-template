@@ -9,13 +9,13 @@ import logging
 from sqlalchemy.ext.asyncio import AsyncSession
 
 {% endif %}
-from {{ package_name }}.api.models import (
+from {{ package_name }}.application.models import (
     ScopeRegistry,
     TaskQueue,
     UnknownScopeError,
     build_task,
 )
-from {{ package_name }}.api.schemas import (
+from {{ package_name }}.application.schemas import (
     DispatchTaskRequest,
     DispatchTaskResponse,
     HealthDTO,

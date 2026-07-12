@@ -12,7 +12,7 @@ from fastapi_azure_auth.user import User
 {% endif %}
 {% if include_example_endpoint %}
 
-from {{ package_name }}.api.models import Item
+from {{ package_name }}.application.models import Item
 
 
 class ItemDTO(BaseModel):

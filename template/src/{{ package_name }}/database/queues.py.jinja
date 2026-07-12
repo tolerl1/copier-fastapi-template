@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 
 from redis.asyncio import Redis
 
-from {{ package_name }}.api.models import QueuedTask, TaskQueue
+from {{ package_name }}.application.models import QueuedTask, TaskQueue
 from {{ package_name }}.core.config import Settings
 
 if TYPE_CHECKING:

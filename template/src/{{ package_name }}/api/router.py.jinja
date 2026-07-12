@@ -16,7 +16,7 @@ from fastapi import (
 {% endif %}
 )
 
-from {{ package_name }}.api.dependencies import (
+from {{ package_name }}.application.dependencies import (
 {% if enable_azure_auth %}
     AdminUserDep,
     CurrentUserDep,
@@ -31,8 +31,8 @@ from {{ package_name }}.api.dependencies import (
     TaskDispatcherDep,
     raise_unknown_scope,
 )
-from {{ package_name }}.api.models import UnknownScopeError
-from {{ package_name }}.api.schemas import (
+from {{ package_name }}.application.models import UnknownScopeError
+from {{ package_name }}.application.schemas import (
 {% if enable_azure_auth %}
     CurrentUserDTO,
 {% endif %}

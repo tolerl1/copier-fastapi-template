@@ -6,7 +6,7 @@ import pytest
 from redis.asyncio import Redis
 from tests.conftest import TEST_REDIS_URL
 
-from {{ package_name }}.api.models import build_task
+from {{ package_name }}.application.models import build_task
 from {{ package_name }}.core.config import Settings
 from {{ package_name }}.database.queues import create_task_queue
 

@@ -46,7 +46,7 @@ Built with `uv`, `prek`, Ruff, `pyright`, `pyupgrade`, async SQLAlchemy, Alembic
 
 ```text
 src/{{ package_name }}/
-  api/
+  application/
     models.py          # Domain models{% if include_example_endpoint %}: items, scope registry, task queues{% else %}: scope registry, task queues{% endif %}
 
     schemas.py         # Request/response DTOs
@@ -67,15 +67,16 @@ src/{{ package_name }}/
 {% if include_example_endpoint -%}
     repositories.py      # Repository implementations
 {% endif -%}
-  routes/
+  api/
     router.py           # Per-domain API routers (system{% if enable_azure_auth %}, auth{% endif %}{% if include_example_endpoint %}, items{% endif %}, tasks)
   main.py                # Application entrypoint
   container.py            # ServiceContainer shape (no service imports at runtime)
   bootstrap.py            # Builds a ServiceContainer from Settings
 tests/{{ package_name }}/
-  api/
+  application/
     test_models.py     # Domain model tests
     test_services.py   # Service tests
+  api/
     test_routes.py     # Route integration tests
 {% if enable_azure_auth -%}
     test_auth.py         # /auth/me + /auth/admin tests via dependency overrides
@@ -93,7 +94,7 @@ tests/{{ package_name }}/
 `container.py` only defines the `ServiceContainer` dataclass (its field types
 are `TYPE_CHECKING`-only imports); `bootstrap.py` does the actual wiring and
 is the only module that imports the concrete services. Request-time code
-(`api/dependencies.py`) imports `container.py`, not `bootstrap.py`, so it
+(`application/dependencies.py`) imports `container.py`, not `bootstrap.py`, so it
 never pulls in the full service graph just to get the container's shape.
 
 ## Quick start
@@ -231,7 +232,7 @@ Define scopes with JSON in `{{ env_prefix }}SCOPES`, for example:
 {% endif -%}
 - `/tasks/dispatch` queues long-running work to the configured queue backend.
 
-Routes are grouped into per-domain `APIRouter`s in `routes/router.py`
+Routes are grouped into per-domain `APIRouter`s in `api/router.py`
 (`system_router`{% if enable_azure_auth %}, `auth_router`{% endif %}{% if include_example_endpoint %}, `items_router`{% endif %}, `tasks_router`), each declaring its own
 `prefix`/`tags` rather than repeating them per route — follow the same
 pattern when adding new domains.
@@ -286,7 +287,7 @@ against Entra ID themselves and send the resulting access token as
 
 ### Using it
 
-- `CurrentUserDep` (in `api/dependencies.py`) resolves to a validated
+- `CurrentUserDep` (in `application/dependencies.py`) resolves to a validated
   `fastapi_azure_auth.user.User` for any endpoint requiring just "a logged-in
   caller" — see `GET /auth/me`.
 - `require_role("SomeRole")` (in `core/auth.py`) builds a dependency that
