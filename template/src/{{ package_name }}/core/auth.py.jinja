@@ -1,21 +1,25 @@
 """Azure Entra ID authentication.
 
-`azure_scheme` is a module-level singleton (mirrors `main.py`'s top-level
-`app = create_app()`) so route modules can depend on it directly via
-`Depends(azure_scheme)`. It validates the bearer JWT's signature (against
-Entra ID's published signing keys), issuer, audience, and expiry on every
-call, lazily fetching and caching Entra ID's OpenID configuration the first
-time it's needed — see fastapi-azure-auth's `OpenIdConfig.load_config()` if
-you'd rather pre-warm that cache during startup instead (it needs live
-network access to Microsoft's endpoints, which is why it isn't wired into
-`main.py`'s lifespan by default: it would make every test that builds an
-app, not just auth tests, depend on that network call succeeding).
+`build_azure_scheme` builds the JWT-validation dependency from whatever
+`Settings` the container was constructed with (see `bootstrap.build_container`),
+rather than from a module-level singleton — that way `create_app(settings=...)`
+overrides (used by tests and alternate entrypoints) actually take effect.
+`get_current_user` then resolves the caller for a given request by calling
+the container's `azure_scheme` directly. It validates the bearer JWT's
+signature (against Entra ID's published signing keys), issuer, audience, and
+expiry on every call, lazily fetching and caching Entra ID's OpenID
+configuration the first time it's needed — see fastapi-azure-auth's
+`OpenIdConfig.load_config()` if you'd rather pre-warm that cache during
+startup instead (it needs live network access to Microsoft's endpoints,
+which is why it isn't wired into `main.py`'s lifespan by default: it would
+make every test that builds an app, not just auth tests, depend on that
+network call succeeding).
 
 Role checking (`check_role`) is kept separate from identity resolution
-(`azure_scheme`): it only assumes the resolved caller exposes a `roles`
+(`get_current_user`): it only assumes the resolved caller exposes a `roles`
 list, not that the caller came from Entra ID. Swapping in another
 JWT-based provider later (e.g. AWS Cognito, Sign in with Apple) means
-writing a new identity-resolution dependency to replace `azure_scheme` —
+writing a new identity-resolution dependency to replace `get_current_user` —
 `check_role`/`require_role` keep working unchanged.
 """
 
@@ -24,28 +28,72 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable
 from typing import Annotated, Protocol
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
+from fastapi.security import SecurityScopes
 from fastapi_azure_auth import SingleTenantAzureAuthorizationCodeBearer
 from fastapi_azure_auth.user import User
 
+from {{ package_name }}.container import ContainerDep
 from {{ package_name }}.core.config import Settings
 
-_settings = Settings()
 
-if _settings.azure_tenant_id is None or _settings.azure_client_id is None:
-    msg = (
-        "{{ env_prefix }}AZURE_TENANT_ID and {{ env_prefix }}AZURE_CLIENT_ID "
-        "are required when Azure Entra ID auth is enabled."
+def build_azure_scheme(settings: Settings) -> SingleTenantAzureAuthorizationCodeBearer:
+    """Builds the Azure Entra ID JWT-validation dependency from settings.
+
+    Args:
+        settings (Settings): Runtime settings the container was built with.
+
+    Returns:
+        SingleTenantAzureAuthorizationCodeBearer: Configured JWT-validation
+            dependency.
+
+    Raises:
+        RuntimeError: If the tenant or client ID isn't configured.
+    """
+
+    if settings.azure_tenant_id is None or settings.azure_client_id is None:
+        msg = (
+            "{{ env_prefix }}AZURE_TENANT_ID and {{ env_prefix }}AZURE_CLIENT_ID "
+            "are required when Azure Entra ID auth is enabled."
+        )
+        raise RuntimeError(msg)
+
+    scope = f"api://{settings.azure_client_id}/user_impersonation"
+    return SingleTenantAzureAuthorizationCodeBearer(
+        app_client_id=settings.azure_client_id,
+        tenant_id=settings.azure_tenant_id,
+        scopes={scope: "user_impersonation"},
     )
-    raise RuntimeError(msg)
 
-azure_scheme = SingleTenantAzureAuthorizationCodeBearer(
-    app_client_id=_settings.azure_client_id,
-    tenant_id=_settings.azure_tenant_id,
-    scopes={
-        f"api://{_settings.azure_client_id}/user_impersonation": "user_impersonation",
-    },
-)
+
+async def get_current_user(container: ContainerDep, request: Request) -> User:
+    """Resolves the caller by validating the request's bearer JWT.
+
+    Passes empty `SecurityScopes`, matching what FastAPI would auto-inject
+    for a plain `Depends(azure_scheme)` with no `Security(..., scopes=[...])`
+    declared on the route — this dependency doesn't itself add a scope
+    requirement; use `require_role(...)` for authorization instead.
+
+    Args:
+        container (ServiceContainer): Application service container, whose
+            `azure_scheme` was built from this app's own settings.
+        request (Request): Current request, forwarded to `azure_scheme`.
+
+    Returns:
+        User: Caller resolved by the container's `azure_scheme`.
+
+    Raises:
+        HTTPException: 401 if no caller could be resolved (only reachable if
+            `azure_scheme.auto_error` is disabled; it's enabled by default,
+            in which case `azure_scheme` itself already raised).
+    """
+
+    user = await container.azure_scheme(request, SecurityScopes())
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated"
+        )
+    return user
 
 
 class _HasRoles(Protocol):
@@ -94,11 +142,11 @@ def require_role(role: str) -> Callable[..., Awaitable[User]]:
         Callable: FastAPI dependency resolving to the caller if authorized.
     """
 
-    async def _require_role(user: Annotated[User, Depends(azure_scheme)]) -> User:
-        """Resolves the caller via `azure_scheme` and checks their role.
+    async def _require_role(user: Annotated[User, Depends(get_current_user)]) -> User:
+        """Resolves the caller via `get_current_user` and checks their role.
 
         Args:
-            user (User): Caller resolved by `azure_scheme`.
+            user (User): Caller resolved by `get_current_user`.
 
         Returns:
             User: The same caller, once authorized.

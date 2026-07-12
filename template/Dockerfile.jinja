@@ -28,4 +28,8 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
     CMD python -c "import urllib.request as u; u.urlopen('http://localhost:8000/health', timeout=2)" || exit 1
 
-CMD ["uvicorn", "{{ package_name }}.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Runs the `{{ package_slug }}` console script (main:serve), so
+# {{ env_prefix }}HOST/{{ env_prefix }}PORT are honored the same way they are
+# under `uv run {{ package_slug }}` — unlike invoking uvicorn directly here,
+# which would hardcode the bind address regardless of Settings.
+CMD ["{{ package_slug }}"]

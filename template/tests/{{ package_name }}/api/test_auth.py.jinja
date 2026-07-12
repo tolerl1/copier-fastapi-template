@@ -1,10 +1,10 @@
 """Tests for Azure Entra ID auth: JWT validation dependency and role checks.
 
-These override `azure_scheme` via `app.dependency_overrides` rather than
-exercising real JWT validation — `azure_scheme.__call__` needs live network
-access to Entra ID's signing keys, which isn't something a unit test suite
-should depend on. Validate the real thing against a real Entra ID tenant in
-a manual/integration pass instead.
+These override `get_current_user` via `app.dependency_overrides` rather than
+exercising real JWT validation — the container's `azure_scheme` needs live
+network access to Entra ID's signing keys, which isn't something a unit test
+suite should depend on. Validate the real thing against a real Entra ID
+tenant in a manual/integration pass instead.
 """
 
 from __future__ import annotations
@@ -14,7 +14,7 @@ import time
 import pytest
 from fastapi_azure_auth.user import User
 
-from {{ package_name }}.core.auth import azure_scheme
+from {{ package_name }}.core.auth import get_current_user
 
 
 def _build_user(roles: list[str]) -> User:
@@ -56,7 +56,7 @@ async def test_me_returns_authenticated_caller(app, client) -> None:
         None: Assertions validate the endpoint response.
     """
 
-    app.dependency_overrides[azure_scheme] = lambda: _build_user(roles=[])
+    app.dependency_overrides[get_current_user] = lambda: _build_user(roles=[])
 
     async with client.get("/auth/me") as response:
         payload = await response.json()
@@ -78,7 +78,7 @@ async def test_admin_route_rejects_caller_without_admin_role(app, client) -> Non
         None: Assertions validate the endpoint response.
     """
 
-    app.dependency_overrides[azure_scheme] = lambda: _build_user(roles=["Viewer"])
+    app.dependency_overrides[get_current_user] = lambda: _build_user(roles=["Viewer"])
 
     async with client.get("/auth/admin") as response:
         assert response.status == 403
@@ -96,7 +96,7 @@ async def test_admin_route_accepts_caller_with_admin_role(app, client) -> None:
         None: Assertions validate the endpoint response.
     """
 
-    app.dependency_overrides[azure_scheme] = lambda: _build_user(roles=["Admin"])
+    app.dependency_overrides[get_current_user] = lambda: _build_user(roles=["Admin"])
 
     async with client.get("/auth/admin") as response:
         payload = await response.json()

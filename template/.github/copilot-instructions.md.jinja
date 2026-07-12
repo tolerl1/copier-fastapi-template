@@ -13,7 +13,7 @@
 - OpenTelemetry is disabled for this project; logging still carries correlation IDs but not trace/span IDs.
 {% endif -%}
 {% if enable_azure_auth -%}
-- Azure Entra ID protects this API: `core/auth.py` exposes a module-level `azure_scheme` JWT-validation dependency, `CurrentUserDep` (any valid caller), and `require_role("X")` (app-role gated). Don't parse tokens by hand and don't call `azure_scheme` with real tokens in tests — override it via `app.dependency_overrides`.
+- Azure Entra ID protects this API: `core/auth.py` builds an `azure_scheme` JWT-validation dependency from the container's settings, exposing `get_current_user` (any valid caller) and `require_role("X")` (app-role gated). Don't parse tokens by hand and don't call `azure_scheme` with real tokens in tests — override `get_current_user` via `app.dependency_overrides`. Only routers that declare `dependencies=[Depends(get_current_user)]` are actually protected — enabling Azure auth doesn't gate a new router by itself.
 {% endif -%}
 - Type-check with `pyright`, not mypy or `ty`.
 - Refresh `.agents/skills` and `.claude/skills` with `uv run library-skills --tool-skill install --claude --yes --all` when dependencies change.

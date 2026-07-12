@@ -1,4 +1,10 @@
-"""Integration tests for SQLAlchemy repositories against a real Postgres database."""
+"""Integration tests for SQLAlchemy repositories against a real Postgres database.
+
+These read the migration-seeded `items` table with no per-test transaction
+rollback — fine as long as every test only reads. A test that writes must
+clean up after itself (or wrap its session in a rollback), since there's no
+isolation between tests sharing this database.
+"""
 
 from __future__ import annotations
 

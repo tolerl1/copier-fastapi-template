@@ -4,11 +4,17 @@ from __future__ import annotations
 
 {% if include_example_endpoint %}
 from typing import Annotated
-
-from fastapi import APIRouter, Query
-{% else %}
-from fastapi import APIRouter
 {% endif %}
+
+from fastapi import (
+    APIRouter,
+{% if enable_azure_auth %}
+    Depends,
+{% endif %}
+{% if include_example_endpoint %}
+    Query,
+{% endif %}
+)
 
 from {{ package_name }}.api.dependencies import (
 {% if enable_azure_auth %}
@@ -37,15 +43,30 @@ from {{ package_name }}.api.schemas import (
     PaginatedItemsDTO,
 {% endif %}
 )
+{% if enable_azure_auth %}
+from {{ package_name }}.core.auth import get_current_user
+{% endif %}
 
 system_router = APIRouter(tags=["system"])
 {% if enable_azure_auth %}
 auth_router = APIRouter(prefix="/auth", tags=["auth"])
 {% endif %}
 {% if include_example_endpoint %}
-items_router = APIRouter(prefix="/items", tags=["examples"])
+items_router = APIRouter(
+    prefix="/items",
+    tags=["examples"],
+{% if enable_azure_auth %}
+    dependencies=[Depends(get_current_user)],
 {% endif %}
-tasks_router = APIRouter(prefix="/tasks", tags=["tasks"])
+)
+{% endif %}
+tasks_router = APIRouter(
+    prefix="/tasks",
+    tags=["tasks"],
+{% if enable_azure_auth %}
+    dependencies=[Depends(get_current_user)],
+{% endif %}
+)
 
 
 @system_router.get("/health")
@@ -73,7 +94,7 @@ async def whoami(user: CurrentUserDep) -> CurrentUserDTO:
     does.
 
     Args:
-        user (User): Caller resolved by `azure_scheme`.
+        user (User): Caller resolved by `get_current_user`.
 
     Returns:
         CurrentUserDTO: The caller's identity and app roles.

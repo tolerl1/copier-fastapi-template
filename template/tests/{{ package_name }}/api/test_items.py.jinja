@@ -8,10 +8,13 @@ from {{ package_name }}.api.dependencies import get_item_service
 from {{ package_name }}.api.services import ItemService
 from {{ package_name }}.bootstrap import build_container
 from {{ package_name }}.core.config import Settings
+{% if enable_azure_auth %}
+from {{ package_name }}.core.auth import get_current_user
+{% endif %}
 
 
 @pytest.mark.asyncio
-async def test_items_endpoint_returns_example_items(client) -> None:
+async def test_items_endpoint_returns_example_items({% if enable_azure_auth %}app, {% endif %}client) -> None:
     """Verifies the items endpoint.
 
     Args:
@@ -20,6 +23,9 @@ async def test_items_endpoint_returns_example_items(client) -> None:
     Returns:
         None: Assertions validate the endpoint response.
     """
+{% if enable_azure_auth %}
+    app.dependency_overrides[get_current_user] = lambda: object()
+{% endif %}
 
     async with client.get("/items") as response:
         payload = await response.json()
@@ -35,7 +41,7 @@ async def test_items_endpoint_returns_example_items(client) -> None:
 
 
 @pytest.mark.asyncio
-async def test_items_endpoint_enforces_pagination_maximum(client) -> None:
+async def test_items_endpoint_enforces_pagination_maximum({% if enable_azure_auth %}app, {% endif %}client) -> None:
     """Verifies the items endpoint enforces the page-size cap.
 
     Args:
@@ -44,6 +50,9 @@ async def test_items_endpoint_enforces_pagination_maximum(client) -> None:
     Returns:
         None: Assertions validate pagination.
     """
+{% if enable_azure_auth %}
+    app.dependency_overrides[get_current_user] = lambda: object()
+{% endif %}
 
     async with client.get("/items?page_size=101") as response:
         assert response.status == 422

@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
-from typing import Annotated, cast
+from typing import Annotated
 
-from fastapi import Depends, HTTPException, Request, status
+from fastapi import Depends, HTTPException, status
 {% if enable_azure_auth %}
 from fastapi_azure_auth.user import User
 {% endif %}
@@ -14,27 +14,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from {{ package_name }}.api.models import UnknownScopeError
 from {{ package_name }}.api.services import HealthService, {% if include_example_endpoint %}ItemService, {% endif %}TaskDispatcher
 {% if enable_azure_auth %}
-from {{ package_name }}.core.auth import azure_scheme, require_admin_role
+from {{ package_name }}.core.auth import get_current_user, require_admin_role
 {% endif %}
-from {{ package_name }}.container import ServiceContainer
-
-
-def get_container(request: Request) -> ServiceContainer:
-    """Returns the application container.
-
-    Args:
-        request (Request): Current request. Keep this unparameterized —
-            `Request[ContainerState]` breaks FastAPI's special-cased
-            injection of the raw ASGI request.
-
-    Returns:
-        ServiceContainer: Application service container.
-    """
-
-    return cast(ServiceContainer, request.state.container)
-
-
-ContainerDep = Annotated[ServiceContainer, Depends(get_container)]
+from {{ package_name }}.container import ContainerDep
 
 
 def get_health_service(container: ContainerDep) -> HealthService:
@@ -107,7 +89,7 @@ DbSessionDep = Annotated[AsyncSession, Depends(get_db_session)]
 
 
 {% if enable_azure_auth %}
-CurrentUserDep = Annotated[User, Depends(azure_scheme)]
+CurrentUserDep = Annotated[User, Depends(get_current_user)]
 AdminUserDep = Annotated[User, Depends(require_admin_role)]
 
 

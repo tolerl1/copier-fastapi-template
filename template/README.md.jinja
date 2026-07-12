@@ -292,19 +292,26 @@ against Entra ID themselves and send the resulting access token as
 - `require_role("SomeRole")` (in `core/auth.py`) builds a dependency that
   also 403s callers missing that Entra ID app role. `require_admin_role` is
   a ready-made example (`GET /auth/admin`); add more the same way for your
-  own roles. `require_role` is just `azure_scheme` wired to
+  own roles. `require_role` is just `get_current_user` wired to
   `check_role(role, user)`, a provider-agnostic role check that only
   assumes `user.roles` — swapping in another JWT-based provider (e.g. AWS
   Cognito, Sign in with Apple) later means writing a new identity-resolution
-  dependency to replace `azure_scheme`; `check_role` keeps working as-is.
+  dependency to replace `get_current_user`; `check_role` keeps working as-is.
 - `azure_scheme` validates the token's signature (against Entra ID's
   published signing keys, fetched and cached automatically), issuer,
-  audience, and expiry on every call — there's nothing else to wire up per
-  route beyond depending on `CurrentUserDep`/`require_role(...)`.
+  audience, and expiry on every call. It's built per-container from that
+  container's own settings (`core/auth.build_azure_scheme`), not a
+  module-level singleton, so `create_app(settings=...)` overrides actually
+  take effect.
+- Auth is opt-in per router, not global: only routers that declare
+  `dependencies=[Depends(get_current_user)]` (like the example `/items` and
+  `/tasks` routers here) actually require a valid caller. A new router you
+  add needs the same `dependencies=[...]` — enabling `enable_azure_auth`
+  alone doesn't protect it.
 
 ### Testing
 
-`tests/{{ package_name }}/api/test_auth.py` overrides `azure_scheme` via
+`tests/{{ package_name }}/api/test_auth.py` overrides `get_current_user` via
 `app.dependency_overrides` with a fake `User` rather than validating real
 tokens — `azure_scheme` needs live network access to Entra ID's signing
 keys, which a unit test suite shouldn't depend on. Follow the same pattern

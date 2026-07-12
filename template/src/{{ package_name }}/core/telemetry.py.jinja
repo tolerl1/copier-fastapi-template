@@ -8,7 +8,11 @@ from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExport
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from opentelemetry.sdk.resources import DEPLOYMENT_ENVIRONMENT, SERVICE_NAME, Resource
 from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter
+from opentelemetry.sdk.trace.export import (
+    BatchSpanProcessor,
+    ConsoleSpanExporter,
+    SimpleSpanProcessor,
+)
 
 from {{ package_name }}.core.config import Settings
 
@@ -58,11 +62,17 @@ def configure_telemetry(app: FastAPI, settings: Settings) -> None:
             }
         )
     )
-    exporter = (
-        OTLPSpanExporter(endpoint=_resolve_traces_endpoint(settings.otlp_endpoint))
+    # BatchSpanProcessor suits the network-bound OTLP exporter (batches
+    # reduce request overhead); SimpleSpanProcessor exports console spans
+    # synchronously instead of from a background thread that can outlive a
+    # short-lived process (e.g. a test run) and log write-after-close errors.
+    processor = (
+        BatchSpanProcessor(
+            OTLPSpanExporter(endpoint=_resolve_traces_endpoint(settings.otlp_endpoint))
+        )
         if settings.otlp_endpoint
-        else ConsoleSpanExporter()
+        else SimpleSpanProcessor(ConsoleSpanExporter())
     )
-    provider.add_span_processor(BatchSpanProcessor(exporter))
+    provider.add_span_processor(processor)
     trace.set_tracer_provider(provider)
     FastAPIInstrumentor.instrument_app(app, tracer_provider=provider)
