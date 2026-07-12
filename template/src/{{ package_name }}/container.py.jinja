@@ -1,0 +1,62 @@
+"""The application service container's shape.
+
+Deliberately separate from `bootstrap.py`: this module only defines what a
+`ServiceContainer` looks like, so request-time code (`api/dependencies.py`)
+can depend on the type without pulling in the whole service graph that
+`bootstrap.build_container` wires up. Import `bootstrap` only where a
+container actually needs to be built (currently just `main.py`).
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from {{ package_name }}.api.models import ScopeRegistry, TaskQueue
+    from {{ package_name }}.api.services import (
+        HealthService,
+{% if include_example_endpoint %}
+        ItemService,
+{% endif %}
+        TaskDispatcher,
+    )
+    from {{ package_name }}.core.config import Settings
+    from {{ package_name }}.database.session import DatabaseSessionManager
+
+
+@dataclass(slots=True)
+class ServiceContainer:
+    """Stores dependency-injected services.
+
+    Attributes:
+        settings (Settings): Runtime settings.
+        session_manager (DatabaseSessionManager): Async SQLAlchemy session manager.
+        scope_registry (ScopeRegistry): Configured scope registry.
+        health_service (HealthService): Health application service.
+{% if include_example_endpoint %}
+        item_service (ItemService): Example item application service.
+{% endif %}
+        task_dispatcher (TaskDispatcher): Long-running task dispatcher.
+        task_queue (TaskQueue): Queue backend adapter.
+    """
+
+    settings: Settings
+    session_manager: DatabaseSessionManager
+    scope_registry: ScopeRegistry
+    health_service: HealthService
+{% if include_example_endpoint %}
+    item_service: ItemService
+{% endif %}
+    task_dispatcher: TaskDispatcher
+    task_queue: TaskQueue
+
+    async def shutdown(self) -> None:
+        """Releases container resources.
+
+        Returns:
+            None: Queue and database resources are released in-place.
+        """
+
+        await self.task_queue.close()
+        await self.session_manager.dispose()

@@ -2,29 +2,45 @@
 
 {{ description }}
 
-Built with `uv`, `prek`, Ruff, `ty` strict mode, `pyupgrade`, async SQLAlchemy, Alembic, queue handoff, and OpenTelemetry.
+Built with `uv`, `prek`, Ruff, `pyright`, `pyupgrade`, async SQLAlchemy, Alembic, and queue handoff{% if enable_telemetry %}, and OpenTelemetry{% endif %}.
 
 ## Features
 
 - Python {{ python_version }}+
-- `uv` package management and `uv_build`
-- `prek` Git hooks with Ruff, pyupgrade, `ty`, pytest, and conventional commit validation
-- GitHub Actions CI running Ruff, `ty`, and pytest on every push and pull request
-- Docker and Docker Compose for local Postgres and Redis
+- `uv` package management with a `hatchling` build backend
+- `prek` Git hooks with Ruff, pyupgrade, `pyright`, pytest, and conventional commit validation
+- GitHub Actions CI running Ruff, `pyright`, and pytest on every push and pull request
+- Docker and Docker Compose for local Postgres and Redis; the app image runs as a
+  non-root user and ships a `HEALTHCHECK` against `/health`
+- Dependabot for `uv`, GitHub Actions, and Docker base image updates
 - `library-skills` support for `.agents/skills` and `.claude/skills` discovery
 - Clear layering with configurable scopes
 - Dependency injection through a lightweight service container
 - Async FastAPI + SQLAlchemy ORM + `asyncpg`
-- Long-running task dispatch to Redis or Azure Storage Queue
+- Long-running task dispatch to Redis or Azure Storage Queue (the latter behind
+  an optional `azure` extra — see [Queue backends](#queue-backends))
+{% if enable_telemetry -%}
 - Trace-aware logging with correlation IDs and OpenTelemetry instrumentation
+{% else -%}
+- Correlation-ID-aware structured logging (OpenTelemetry tracing left out —
+  regenerate with `enable_telemetry=true` to add it back)
+{% endif -%}
 - Correlation ID propagation across requests and logs
 {% if include_example_endpoint -%}
 - Paginated collection endpoints with a default size of 20 and a maximum of 100
 - An example `/items` endpoint demonstrating the request/service/route pattern
 {% endif -%}
 - Alembic migrations
+{% if enable_azure_auth -%}
+- Azure Entra ID (single-tenant) JWT validation via `fastapi-azure-auth`,
+  with a `require_role(...)` helper and an example `/auth/me` + `/auth/admin`
+  router — see [Authentication](#authentication-azure-entra-id)
+{% endif -%}
+- Commitizen-driven `CHANGELOG.md` and version bumps on merge to `main`
+  (`.github/workflows/release.yml`)
 - Tests that mirror the `src` package layout
 - GitHub Copilot, Claude, and agent instruction files
+- `CONTRIBUTING.md`, a Code of Conduct, and issue/PR templates
 
 ## Project layout
 
@@ -39,7 +55,12 @@ src/{{ package_name }}/
   core/
     config.py          # Configuration
     logging.py          # Structured logging
+{% if enable_telemetry -%}
     telemetry.py        # OpenTelemetry tracing
+{% endif -%}
+{% if enable_azure_auth -%}
+    auth.py              # azure_scheme JWT validation + require_role()
+{% endif -%}
   database/
     session.py          # SQLAlchemy session management and ORM models
     queues.py            # Queue backend adapters
@@ -47,14 +68,18 @@ src/{{ package_name }}/
     repositories.py      # Repository implementations
 {% endif -%}
   routes/
-    router.py           # Per-domain API routers (system{% if include_example_endpoint %}, items{% endif %}, tasks)
+    router.py           # Per-domain API routers (system{% if enable_azure_auth %}, auth{% endif %}{% if include_example_endpoint %}, items{% endif %}, tasks)
   main.py                # Application entrypoint
-  bootstrap.py           # Service container builder
+  container.py            # ServiceContainer shape (no service imports at runtime)
+  bootstrap.py            # Builds a ServiceContainer from Settings
 tests/{{ package_name }}/
   api/
     test_models.py     # Domain model tests
     test_services.py   # Service tests
     test_routes.py     # Route integration tests
+{% if enable_azure_auth -%}
+    test_auth.py         # /auth/me + /auth/admin tests via dependency overrides
+{% endif -%}
 {% if include_example_endpoint -%}
     test_items.py       # Example /items endpoint tests
 {% endif -%}
@@ -64,6 +89,12 @@ tests/{{ package_name }}/
 {% endif -%}
     test_queues.py         # Queue adapter tests against a real Redis instance
 ```
+
+`container.py` only defines the `ServiceContainer` dataclass (its field types
+are `TYPE_CHECKING`-only imports); `bootstrap.py` does the actual wiring and
+is the only module that imports the concrete services. Request-time code
+(`api/dependencies.py`) imports `container.py`, not `bootstrap.py`, so it
+never pulls in the full service graph just to get the container's shape.
 
 ## Quick start
 
@@ -90,6 +121,10 @@ reads `host`/`port` from `Settings` (`.env`). Because the project depends on
 just note its `--host`/`--port` flags are independent of `{{ env_prefix }}HOST`/
 `{{ env_prefix }}PORT`.
 
+A `Makefile` wraps the common commands (`make install`, `make dev`, `make test`,
+`make lint`, `make format`, `make typecheck`, `make check`, `make migrate`,
+`make up`, `make hooks`) if you'd rather not type the `uv run ...` forms.
+
 ## Running with Docker
 
 ```bash
@@ -98,14 +133,15 @@ docker compose up --build
 ```
 
 This builds the application image and starts it alongside Postgres and Redis. The API
-is available at `http://localhost:8000`.
+is available at `http://localhost:8000`. The image runs as a non-root user and
+declares a `HEALTHCHECK` against `/health`.
 
 ## Quality checks
 
 ```bash
 uv run ruff check .
 uv run ruff format .
-uv run ty check
+uv run pyright
 uv run pytest
 uv run library-skills --tool-skill install --claude --yes --all
 uv tool install prek
@@ -153,6 +189,21 @@ Use environment variables to switch backends:
 - `{{ env_prefix }}QUEUE_BACKEND=redis`
 - `{{ env_prefix }}QUEUE_BACKEND=azure_storage_queue`
 
+`azure-storage-queue` is an optional dependency (the `azure` extra), not a
+default install, since most projects only need `memory` or `redis`. Install
+it before switching to the Azure backend:
+
+```bash
+uv sync --extra azure
+```
+
+Selecting `azure_storage_queue` without the extra installed raises a clear
+`ImportError` at queue-construction time telling you to run the command
+above. To add a different backend (SQS, GCP Pub/Sub, ...), implement the
+same `enqueue`/`ping`/`close` protocol as `RedisTaskQueue` in
+`database/queues.py`, add it as its own optional extra in `pyproject.toml`,
+and branch on it in `create_task_queue`.
+
 Define scopes with JSON in `{{ env_prefix }}SCOPES`, for example:
 
 ```json
@@ -167,6 +218,11 @@ Define scopes with JSON in `{{ env_prefix }}SCOPES`, for example:
 - `/health` reports queue reachability and a real database liveness check
   (a pooled connection checkout through the async engine), not just URL-shape
   validation.
+{% if enable_azure_auth -%}
+- `/auth/me` and `/auth/admin` require a valid Entra ID bearer token (the
+  latter also requires the `Admin` app role) — see
+  [Authentication](#authentication-azure-entra-id).
+{% endif -%}
 {% if include_example_endpoint -%}
 - `/items` is a real, Postgres-backed example endpoint demonstrating paginated
   collections (`page_size=20` by default, `100` as the maximum) with a
@@ -176,7 +232,7 @@ Define scopes with JSON in `{{ env_prefix }}SCOPES`, for example:
 - `/tasks/dispatch` queues long-running work to the configured queue backend.
 
 Routes are grouped into per-domain `APIRouter`s in `routes/router.py`
-(`system_router`{% if include_example_endpoint %}, `items_router`{% endif %}, `tasks_router`), each declaring its own
+(`system_router`{% if enable_azure_auth %}, `auth_router`{% endif %}{% if include_example_endpoint %}, `items_router`{% endif %}, `tasks_router`), each declaring its own
 `prefix`/`tags` rather than repeating them per route — follow the same
 pattern when adding new domains.
 
@@ -188,7 +244,7 @@ All requests automatically receive a correlation ID for backend tracing:
 - Correlation IDs are included in all response headers as `x-correlation-id`.
 - Correlation IDs are propagated through logs in the format:
   ```
-  [correlation_id=<id> trace_id=<trace> span_id=<span>]
+  [correlation_id=<id>{% if enable_telemetry %} trace_id=<trace> span_id=<span>{% endif %}]
   ```
 
 Use the response header value to trace a request through backend logs:
@@ -200,6 +256,65 @@ curl -i http://localhost:8000/health
 **Backend observability**: Correlation IDs are intended for server-side request
 inspection. Clients do not supply them; downstream services should use the internally
 generated value when propagating backend trace context.
+
+{% if enable_azure_auth -%}
+## Authentication (Azure Entra ID)
+
+This service is a resource server, not an identity provider: it validates
+bearer JWTs issued by Entra ID, it doesn't run a login page. Clients (a
+frontend, another service, a script using client-credentials) authenticate
+against Entra ID themselves and send the resulting access token as
+`Authorization: Bearer <token>`.
+
+### Required setup (single-tenant)
+
+1. In Entra ID, create an app registration for this API (or reuse an
+   existing one). Note its **Application (client) ID** and your
+   **Directory (tenant) ID**.
+2. Under "Expose an API", add a scope named `user_impersonation` (the
+   default `azure_scheme` configuration expects `api://<client id>/user_impersonation`).
+3. Under "App roles", add any roles you want to gate routes on (the example
+   route below expects one named `Admin`), then assign them to users/groups/
+   service principals in Enterprise Applications.
+4. Set `{{ env_prefix }}AZURE_TENANT_ID` and `{{ env_prefix }}AZURE_CLIENT_ID` in `.env` — the
+   app raises a clear `pydantic.ValidationError` at startup if either is
+   missing.
+5. If you also want Swagger UI's "Authorize" button to work, register a
+   separate public client (SPA) app registration for it and set
+   `{{ env_prefix }}AZURE_OPENAPI_CLIENT_ID`; otherwise it falls back to
+   `{{ env_prefix }}AZURE_CLIENT_ID`.
+
+### Using it
+
+- `CurrentUserDep` (in `api/dependencies.py`) resolves to a validated
+  `fastapi_azure_auth.user.User` for any endpoint requiring just "a logged-in
+  caller" — see `GET /auth/me`.
+- `require_role("SomeRole")` (in `core/auth.py`) builds a dependency that
+  also 403s callers missing that Entra ID app role. `require_admin_role` is
+  a ready-made example (`GET /auth/admin`); add more the same way for your
+  own roles.
+- `azure_scheme` validates the token's signature (against Entra ID's
+  published signing keys, fetched and cached automatically), issuer,
+  audience, and expiry on every call — there's nothing else to wire up per
+  route beyond depending on `CurrentUserDep`/`require_role(...)`.
+
+### Testing
+
+`tests/{{ package_name }}/api/test_auth.py` overrides `azure_scheme` via
+`app.dependency_overrides` with a fake `User` rather than validating real
+tokens — `azure_scheme` needs live network access to Entra ID's signing
+keys, which a unit test suite shouldn't depend on. Follow the same pattern
+for your own protected routes; validate against a real tenant in a manual
+or integration pass instead.
+
+{% endif -%}
+## Releasing
+
+`.github/workflows/release.yml` runs Commitizen on every push to `main`: it
+inspects [Conventional Commits](https://www.conventionalcommits.org/) since
+the last tag, bumps the version in `pyproject.toml`, updates `CHANGELOG.md`,
+and pushes a `vX.Y.Z` tag. Nothing to do manually beyond following the commit
+message convention (already enforced by the `commit-msg` hook).
 
 ## Agent skill discovery
 

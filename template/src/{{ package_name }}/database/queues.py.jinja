@@ -3,13 +3,17 @@
 from __future__ import annotations
 
 import contextlib
+from typing import TYPE_CHECKING
 
-from azure.core.exceptions import ResourceExistsError, ResourceNotFoundError
-from azure.storage.queue.aio import QueueClient
 from redis.asyncio import Redis
 
 from {{ package_name }}.api.models import QueuedTask, TaskQueue
 from {{ package_name }}.core.config import Settings
+
+if TYPE_CHECKING:
+    # azure-storage-queue is the optional `azure` extra, not installed by
+    # default, so pyright can't resolve this without it.
+    from azure.storage.queue.aio import QueueClient  # pyright: ignore
 
 
 class InMemoryTaskQueue:
@@ -116,21 +120,37 @@ class RedisTaskQueue:
 class AzureStorageQueueTaskQueue:
     """Queues work to Azure Storage Queue.
 
+    The `azure-storage-queue` SDK is an optional dependency (the `azure`
+    extra), so this class never imports it directly — `_build_azure_queue`
+    below does the deferred import and hands the resolved client and
+    exception types in.
+
     Attributes:
         _client (QueueClient): Async Azure queue client.
+        _resource_exists_error (type[Exception]): Azure "already exists" error type.
+        _resource_not_found_error (type[Exception]): Azure "not found" error type.
     """
 
-    def __init__(self, client: QueueClient) -> None:
+    def __init__(
+        self,
+        client: QueueClient,
+        resource_exists_error: type[Exception],
+        resource_not_found_error: type[Exception],
+    ) -> None:
         """Creates the Azure queue adapter.
 
         Args:
             client (QueueClient): Async Azure queue client.
+            resource_exists_error (type[Exception]): Azure "already exists" error type.
+            resource_not_found_error (type[Exception]): Azure "not found" error type.
 
         Returns:
             None: The adapter is initialized in-place.
         """
 
         self._client = client
+        self._resource_exists_error = resource_exists_error
+        self._resource_not_found_error = resource_not_found_error
 
     async def _create_queue_if_missing(self) -> None:
         """Creates the target queue, tolerating a concurrent creator.
@@ -143,7 +163,7 @@ class AzureStorageQueueTaskQueue:
             None: The queue exists once this returns.
         """
 
-        with contextlib.suppress(ResourceExistsError):
+        with contextlib.suppress(self._resource_exists_error):
             await self._client.create_queue()
 
     async def enqueue(self, task: QueuedTask) -> None:
@@ -159,7 +179,7 @@ class AzureStorageQueueTaskQueue:
         message = task.to_message().model_dump_json()
         try:
             await self._client.send_message(message)
-        except ResourceNotFoundError:
+        except self._resource_not_found_error:
             await self._create_queue_if_missing()
             await self._client.send_message(message)
 
@@ -177,7 +197,7 @@ class AzureStorageQueueTaskQueue:
         try:
             await self._client.get_queue_properties()
             return True
-        except ResourceNotFoundError:
+        except self._resource_not_found_error:
             try:
                 await self._create_queue_if_missing()
                 return True
@@ -196,6 +216,53 @@ class AzureStorageQueueTaskQueue:
         await self._client.close()
 
 
+def _build_azure_queue(settings: Settings) -> AzureStorageQueueTaskQueue:
+    """Builds the Azure Storage Queue adapter, importing the optional SDK lazily.
+
+    `azure-storage-queue` lives behind the `azure` extra instead of being a
+    hard dependency, so most projects (using `memory` or `redis`) never pull
+    in the Azure SDK at all.
+
+    Args:
+        settings (Settings): Runtime settings.
+
+    Returns:
+        AzureStorageQueueTaskQueue: Configured adapter.
+
+    Raises:
+        ImportError: If `azure-storage-queue` isn't installed.
+        ValueError: If the Azure connection string is missing.
+    """
+
+    try:
+        from azure.core.exceptions import (  # pyright: ignore
+            ResourceExistsError,
+            ResourceNotFoundError,
+        )
+        from azure.storage.queue.aio import QueueClient  # pyright: ignore
+    except ImportError as error:
+        msg = (
+            "azure-storage-queue is required for "
+            "{{ env_prefix }}QUEUE_BACKEND=azure_storage_queue but isn't "
+            "installed. Install it with `uv sync --extra azure` (or "
+            "`uv add --optional azure azure-storage-queue`), then retry."
+        )
+        raise ImportError(msg) from error
+
+    if settings.azure_storage_queue_connection_string is None:
+        msg = "{{ env_prefix }}AZURE_STORAGE_QUEUE_CONNECTION_STRING is required."
+        raise ValueError(msg)
+
+    return AzureStorageQueueTaskQueue(
+        client=QueueClient.from_connection_string(
+            conn_str=settings.azure_storage_queue_connection_string,
+            queue_name=settings.queue_name,
+        ),
+        resource_exists_error=ResourceExistsError,
+        resource_not_found_error=ResourceNotFoundError,
+    )
+
+
 def create_task_queue(settings: Settings) -> TaskQueue:
     """Builds the configured queue adapter.
 
@@ -206,6 +273,8 @@ def create_task_queue(settings: Settings) -> TaskQueue:
         TaskQueue: Configured task queue adapter.
 
     Raises:
+        ImportError: If the azure_storage_queue backend is selected without
+            the `azure` extra installed.
         ValueError: If Azure queue configuration is incomplete.
     """
 
@@ -215,13 +284,5 @@ def create_task_queue(settings: Settings) -> TaskQueue:
             queue_name=settings.queue_name,
         )
     if settings.queue_backend == "azure_storage_queue":
-        if settings.azure_storage_queue_connection_string is None:
-            msg = "{{ env_prefix }}AZURE_STORAGE_QUEUE_CONNECTION_STRING is required."
-            raise ValueError(msg)
-        return AzureStorageQueueTaskQueue(
-            client=QueueClient.from_connection_string(
-                conn_str=settings.azure_storage_queue_connection_string,
-                queue_name=settings.queue_name,
-            )
-        )
+        return _build_azure_queue(settings)
     return InMemoryTaskQueue()

@@ -11,6 +11,10 @@ from fastapi import APIRouter
 {% endif %}
 
 from {{ package_name }}.api.dependencies import (
+{% if enable_azure_auth %}
+    AdminUserDep,
+    CurrentUserDep,
+{% endif %}
 {% if include_example_endpoint %}
     DbSessionDep,
 {% endif %}
@@ -23,6 +27,9 @@ from {{ package_name }}.api.dependencies import (
 )
 from {{ package_name }}.api.models import UnknownScopeError
 from {{ package_name }}.api.schemas import (
+{% if enable_azure_auth %}
+    CurrentUserDTO,
+{% endif %}
     DispatchTaskRequest,
     DispatchTaskResponse,
     HealthDTO,
@@ -32,6 +39,9 @@ from {{ package_name }}.api.schemas import (
 )
 
 system_router = APIRouter(tags=["system"])
+{% if enable_azure_auth %}
+auth_router = APIRouter(prefix="/auth", tags=["auth"])
+{% endif %}
 {% if include_example_endpoint %}
 items_router = APIRouter(prefix="/items", tags=["examples"])
 {% endif %}
@@ -52,6 +62,44 @@ async def health_check(health_service: HealthServiceDep) -> HealthDTO:
     return await health_service.read()
 
 
+{% if enable_azure_auth %}
+@auth_router.get("/me")
+async def whoami(user: CurrentUserDep) -> CurrentUserDTO:
+    """Returns the authenticated caller's identity and app roles.
+
+    Demonstrates the baseline "any valid Entra ID token" pattern — swap
+    `CurrentUserDep` for your own dependency (or add `require_role(...)`
+    checks) to require specific app roles per route, as `/auth/admin` below
+    does.
+
+    Args:
+        user (User): Caller resolved by `azure_scheme`.
+
+    Returns:
+        CurrentUserDTO: The caller's identity and app roles.
+    """
+
+    return CurrentUserDTO.from_user(user)
+
+
+@auth_router.get("/admin")
+async def admin_only(user: AdminUserDep) -> CurrentUserDTO:
+    """Returns the caller's identity, but only if they hold the Admin role.
+
+    Demonstrates `require_role(...)`: this route 403s for any authenticated
+    caller whose token's `roles` claim doesn't include "Admin".
+
+    Args:
+        user (User): Caller resolved by `require_admin_role`.
+
+    Returns:
+        CurrentUserDTO: The caller's identity and app roles.
+    """
+
+    return CurrentUserDTO.from_user(user)
+
+
+{% endif %}
 {% if include_example_endpoint %}
 @items_router.get("")
 async def list_items(
@@ -105,6 +153,9 @@ async def dispatch_task(
 
 router = APIRouter()
 router.include_router(system_router)
+{% if enable_azure_auth %}
+router.include_router(auth_router)
+{% endif %}
 {% if include_example_endpoint %}
 router.include_router(items_router)
 {% endif %}

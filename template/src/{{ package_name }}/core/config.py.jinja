@@ -30,8 +30,10 @@ class Settings(BaseSettings):
         port (int): Port Uvicorn binds to when run via `serve()`.
         database_url (str): Async SQLAlchemy connection string using asyncpg.
         log_level (str): Root logging level, including TRACE support.
+{% if enable_telemetry %}
         telemetry_enabled (bool): Enables OpenTelemetry instrumentation.
         otlp_endpoint (str | None): Optional OTLP HTTP endpoint.
+{% endif %}
         queue_backend (
             Literal["memory", "redis", "azure_storage_queue"]
         ): Queue backend.
@@ -40,6 +42,16 @@ class Settings(BaseSettings):
         azure_storage_queue_connection_string (
             str | None
         ): Azure queue connection string.
+{% if enable_azure_auth %}
+        azure_tenant_id (str | None): Entra ID tenant ID for token validation.
+        azure_client_id (
+            str | None
+        ): This API's own Entra ID app registration client ID.
+        azure_openapi_client_id (
+            str | None
+        ): Public client ID for the Swagger UI Authorize button, if different
+            from `azure_client_id`.
+{% endif %}
         scopes (list[ScopeSettings]): Bounded contexts exposed by the application.
     """
 
@@ -55,13 +67,20 @@ class Settings(BaseSettings):
     host: str = "0.0.0.0"
     port: int = 8000
     database_url: str = "postgresql+asyncpg:///{{ package_name }}"
-    log_level: str = "TRACE"
+    log_level: str = "INFO"
+{% if enable_telemetry %}
     telemetry_enabled: bool = True
     otlp_endpoint: str | None = None
+{% endif %}
     queue_backend: Literal["memory", "redis", "azure_storage_queue"] = "memory"
     queue_name: str = "long-running-tasks"
     redis_url: str = "redis://localhost:6379/0"
     azure_storage_queue_connection_string: str | None = None
+{% if enable_azure_auth %}
+    azure_tenant_id: str | None = None
+    azure_client_id: str | None = None
+    azure_openapi_client_id: str | None = None
+{% endif %}
     scopes: list[ScopeSettings] = Field(
         default_factory=lambda: [
             ScopeSettings(

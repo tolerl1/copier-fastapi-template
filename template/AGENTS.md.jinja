@@ -4,7 +4,12 @@
 - Hooks: `prek install -t pre-commit -t commit-msg -t pre-push` then `prek run --all-files`
 - Skill sync: `uv run library-skills --tool-skill install --claude --yes --all`
 - Linting: `uv run ruff check .` and `uv run ruff format .`
-- Type checking: `uv run ty check`
+- Type checking: `uv run pyright`
 - Tests: `uv run pytest`
 - Migrations: `uv run alembic upgrade head`
-- Architecture: Configurable scopes with dependency injection, async SQLAlchemy, queue handoff, and OpenTelemetry
+- Architecture: Configurable scopes with dependency injection, async SQLAlchemy, queue handoff{% if enable_telemetry %}, and OpenTelemetry{% endif %}
+- `container.py` defines the `ServiceContainer` shape (no runtime service imports); `bootstrap.py` builds one. Don't import `bootstrap` from request-time code — import `container` instead.
+- `azure-storage-queue` is optional (`uv sync --extra azure`); don't hard-import it at module scope in `database/queues.py`.
+{% if enable_azure_auth -%}
+- Azure Entra ID auth: `core/auth.py` builds a module-level `azure_scheme` (JWT validation). Use `CurrentUserDep` for "any authenticated caller" and `require_role("X")` for app-role-gated routes. Never hand-roll token parsing; never call `azure_scheme` with real tokens in tests — override it via `app.dependency_overrides` instead.
+{% endif -%}

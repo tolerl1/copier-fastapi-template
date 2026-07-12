@@ -1,0 +1,83 @@
+"""Azure Entra ID authentication.
+
+`azure_scheme` is a module-level singleton (mirrors `main.py`'s top-level
+`app = create_app()`) so route modules can depend on it directly via
+`Depends(azure_scheme)`. It validates the bearer JWT's signature (against
+Entra ID's published signing keys), issuer, audience, and expiry on every
+call, lazily fetching and caching Entra ID's OpenID configuration the first
+time it's needed — see fastapi-azure-auth's `OpenIdConfig.load_config()` if
+you'd rather pre-warm that cache during startup instead (it needs live
+network access to Microsoft's endpoints, which is why it isn't wired into
+`main.py`'s lifespan by default: it would make every test that builds an
+app, not just auth tests, depend on that network call succeeding).
+"""
+
+from __future__ import annotations
+
+from collections.abc import Awaitable, Callable
+from typing import Annotated
+
+from fastapi import Depends, HTTPException, status
+from fastapi_azure_auth import SingleTenantAzureAuthorizationCodeBearer
+from fastapi_azure_auth.user import User
+
+from {{ package_name }}.core.config import Settings
+
+_settings = Settings()
+
+if _settings.azure_tenant_id is None or _settings.azure_client_id is None:
+    msg = (
+        "{{ env_prefix }}AZURE_TENANT_ID and {{ env_prefix }}AZURE_CLIENT_ID "
+        "are required when Azure Entra ID auth is enabled."
+    )
+    raise RuntimeError(msg)
+
+azure_scheme = SingleTenantAzureAuthorizationCodeBearer(
+    app_client_id=_settings.azure_client_id,
+    tenant_id=_settings.azure_tenant_id,
+    scopes={
+        f"api://{_settings.azure_client_id}/user_impersonation": "user_impersonation",
+    },
+)
+
+
+def require_role(role: str) -> Callable[..., Awaitable[User]]:
+    """Builds a dependency that requires a specific Entra ID app role.
+
+    App roles are configured on the Entra ID app registration and assigned
+    to users/groups/service principals there — see
+    https://learn.microsoft.com/en-us/entra/identity-platform/howto-add-app-roles-in-apps
+
+    Args:
+        role (str): App role name to require (must match the `roles` claim).
+
+    Returns:
+        Callable: FastAPI dependency resolving to the caller if authorized.
+    """
+
+    async def _require_role(user: Annotated[User, Depends(azure_scheme)]) -> User:
+        """Checks the resolved user for the required role.
+
+        Args:
+            user (User): Caller resolved by `azure_scheme`.
+
+        Returns:
+            User: The same caller, once authorized.
+
+        Raises:
+            HTTPException: 403 if the caller lacks the required role.
+        """
+
+        if role not in user.roles:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Missing required role: {role}",
+            )
+        return user
+
+    return _require_role
+
+
+# Example role dependency for the demo /auth/admin route below. Add more
+# `require_role("...")` bindings the same way for your own roles.
+require_admin_role = require_role("Admin")

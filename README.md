@@ -35,8 +35,10 @@ Copier will prompt for:
 | `project_name` | Human-readable app name — the FastAPI title and README heading. Defaults to a title-cased version of `package_name`. |
 | `description` | One-line description used in `pyproject.toml` and the README. |
 | `author_name` | Used in `LICENSE`. |
-| `python_version` | `3.12` or `3.13`. Drives `requires-python`, the Dockerfile base image, `ruff`'s `target-version`, and `ty`'s environment. |
+| `python_version` | `3.12` or `3.13`. Drives `requires-python`, the Dockerfile base image, `ruff`'s `target-version`, and `pyright`'s environment. |
 | `include_example_endpoint` | Off by default. Turn it on to keep the `/items` example (`ItemModel` → `SqlAlchemyItemRepository` → `ItemService` → route) that demonstrates the request/service/repository/DB pattern. Off means a clean project with no example domain code to delete by hand. |
+| `enable_telemetry` | On by default. Wires up OpenTelemetry (tracer provider, OTLP/console exporter, FastAPI instrumentation, trace IDs in log lines) and the four `opentelemetry-*` dependencies. Off drops `core/telemetry.py` and those dependencies entirely for services that don't run a collector. |
+| `enable_azure_auth` | Off by default. Adds `fastapi-azure-auth` and `core/auth.py`: a single-tenant Azure Entra ID JWT-validation dependency (`azure_scheme`), a `require_role(...)` app-role helper, and an example `/auth/me` + `/auth/admin` router. Requires an Entra ID app registration — see the generated project's own README for setup. |
 
 `package_slug` (hyphenated form of `package_name`, used for the `pyproject.toml`
 `name` and the `[project.scripts]` entry) and `env_prefix` are derived
@@ -51,7 +53,9 @@ copier copy gh:tolerl1/copier-fastapi-template path/to/new-project \
   --data description="Owns order lifecycle and fulfillment." \
   --data author_name="Your Name" \
   --data python_version=3.12 \
-  --data include_example_endpoint=false
+  --data include_example_endpoint=false \
+  --data enable_telemetry=true \
+  --data enable_azure_auth=false
 ```
 
 ### After generating
@@ -73,6 +77,20 @@ hooks silently never install:
 uv tool install prek
 prek install -t pre-commit -t commit-msg -t pre-push
 ```
+
+`azure-storage-queue` is an optional dependency (the `azure` extra) rather
+than a hard install, since most projects only ever use the `memory` or
+`redis` queue backend. Install it only if you set
+`<PACKAGE_NAME>_QUEUE_BACKEND=azure_storage_queue`:
+
+```bash
+uv sync --extra azure
+```
+
+Commit messages follow [Conventional Commits](https://www.conventionalcommits.org/)
+(enforced by the `commit-msg` hook and CI). `.github/workflows/release.yml`
+in the generated project reads them on every push to `main` to bump the
+version, update `CHANGELOG.md`, and push a tag via Commitizen.
 
 ### Updating a project after the template changes
 
@@ -97,15 +115,24 @@ and/or `--data`/`--data-file` to supply any new questions non-interactively.
 copier.yml                        # Prompts, validation, derived variables
 README.md                         # This file
 LICENSE                           # This template repo's own license
-.github/workflows/test-template.yml  # Renders the template and runs the
-                                      # generated project's own ruff/ty/pytest
+.github/dependabot.yml            # Keeps this repo's own GitHub Actions pinned versions current
+.github/workflows/test-template.yml  # Renders the template (matrixed across
+                                      # include_example_endpoint, enable_telemetry,
+                                      # and python_version) and runs the
+                                      # generated project's own ruff/pyright/pytest
 template/                         # Everything below here is the actual
                                    # Copier payload (the "_subdirectory")
   copier.yml is NOT in here — Copier config always lives at the repo root.
   src/{{ package_name }}/...
   tests/{{ package_name }}/...
   pyproject.toml.jinja, Dockerfile.jinja, docker-compose.yml.jinja, ...
-  .github/workflows/ci.yml.jinja  # The *generated project's* own CI
+  Makefile.jinja, .editorconfig       # Task runner + editor defaults for the generated project
+  CHANGELOG.md                        # Seed file; Commitizen appends to it on release
+  .github/workflows/ci.yml.jinja      # The *generated project's* own CI
+  .github/workflows/release.yml.jinja # Commitizen version bump + changelog on push to main
+  .github/dependabot.yml              # uv / github-actions / docker update PRs for the generated project
+  .github/CONTRIBUTING.md.jinja, CODE_OF_CONDUCT.md, PULL_REQUEST_TEMPLATE.md,
+    ISSUE_TEMPLATE/                   # Community/process files for the generated project
   alembic/
 ```
 
@@ -118,22 +145,34 @@ above it is about maintaining the template itself.
 
 ## Verifying changes to this template
 
-`.github/workflows/test-template.yml` renders the template twice (once with
-`include_example_endpoint=true`, once with `false`) against real Postgres and
-Redis service containers, then runs `ruff check`, `ruff format --check`,
-`ty check`, and `pytest` inside each rendered project (a session-scoped
-fixture in the rendered project's own `tests/conftest.py` applies Alembic
-migrations to the test database automatically — no separate migration step
-is needed). Run the same steps locally before pushing template changes:
+`.github/workflows/test-template.yml` has two jobs. `render-and-verify` renders
+the template across a matrix of `include_example_endpoint`, `enable_telemetry`,
+and `python_version` (with `enable_azure_auth=false`, the default) against real
+Postgres and Redis service containers, then runs `ruff check`,
+`ruff format --check`, `pyright`, and `pytest` inside each rendered project (a
+session-scoped fixture in the rendered project's own `tests/conftest.py`
+applies Alembic migrations to the test database automatically — no separate
+migration step is needed). `render-and-verify-azure-auth` does the same for a
+single `enable_azure_auth=true` render (not matrixed, since it doesn't
+validate real tokens — `tests/.../test_auth.py` overrides `azure_scheme`
+instead of hitting Entra ID — so there's nothing further to vary per
+combination). Run the same steps locally before pushing template changes:
 
 ```bash
 uv tool install copier
 copier copy . /tmp/rendered-with-items \
   --data package_name=my_service --data include_example_endpoint=true \
+  --data enable_telemetry=true \
   --defaults --trust --vcs-ref HEAD
 cd /tmp/rendered-with-items
 uv sync
-uv run ruff check . && uv run ruff format --check . && uv run ty check
+uv run ruff check . && uv run ruff format --check . && uv run pyright
 docker compose up -d db redis   # or point *_TEST_DATABASE_URL / *_TEST_REDIS_URL elsewhere
 uv run pytest
 ```
+
+For an `enable_azure_auth=true` render, also set placeholder
+`MY_SERVICE_AZURE_TENANT_ID` / `MY_SERVICE_AZURE_CLIENT_ID` env vars before
+`uv run pytest` — `core/auth.py` builds its `azure_scheme` singleton at
+import time, so `Settings()` needs them even though the tests never validate
+a real token.

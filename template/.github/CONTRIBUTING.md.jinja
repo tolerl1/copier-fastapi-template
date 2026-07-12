@@ -1,0 +1,40 @@
+# Contributing to {{ project_name }}
+
+## Setup
+
+```bash
+cp .env.example .env
+uv sync
+docker compose up -d db redis
+uv run alembic upgrade head
+uv tool install prek
+prek install -t pre-commit -t commit-msg -t pre-push
+```
+
+## Making a change
+
+1. Create a branch off `main`.
+2. Make your change, keeping it scoped to one concern.
+3. Run the checks locally before pushing:
+
+   ```bash
+   uv run ruff check .
+   uv run ruff format .
+   uv run pyright
+   uv run pytest
+   ```
+
+   (`prek run --all-files` runs the same checks via the installed git hooks.)
+4. Commit using [Conventional Commits](https://www.conventionalcommits.org/)
+   (`feat:`, `fix:`, `docs:`, `chore:`, ...) — the `commit-msg` hook and CI
+   both enforce this, and `.github/workflows/release.yml` uses commit types
+   to compute the next version and `CHANGELOG.md` entry on merge to `main`.
+5. Open a pull request. CI runs lint, format check, type check, and the test
+   suite against real Postgres/Redis service containers.
+
+## Code style
+
+- Google-style docstrings with explicit types on public functions.
+- Keep request handlers non-blocking; move long-running work to the
+  configured queue backend (see `database/queues.py`).
+- Extend the service container in `bootstrap.py`, not ad hoc globals.

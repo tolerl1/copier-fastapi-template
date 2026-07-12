@@ -1,0 +1,37 @@
+.PHONY: install run dev test lint format typecheck check migrate up down hooks
+
+install:
+	uv sync
+
+run:
+	uv run {{ package_slug }}
+
+dev:
+	uv run fastapi dev src/{{ package_name }}/main.py
+
+test:
+	uv run pytest
+
+lint:
+	uv run ruff check .
+
+format:
+	uv run ruff format .
+
+typecheck:
+	uv run pyright
+
+check: lint typecheck test
+
+migrate:
+	uv run alembic upgrade head
+
+up:
+	docker compose up -d db redis
+
+down:
+	docker compose down
+
+hooks:
+	uv tool install prek
+	prek install -t pre-commit -t commit-msg -t pre-push

@@ -5,6 +5,10 @@ from __future__ import annotations
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field
+{% if enable_azure_auth %}
+
+from fastapi_azure_auth.user import User
+{% endif %}
 {% if include_example_endpoint %}
 
 from {{ package_name }}.api.models import Item
@@ -54,6 +58,42 @@ class PaginatedItemsDTO(BaseModel):
 {% endif %}
 
 
+{% if enable_azure_auth %}
+class CurrentUserDTO(BaseModel):
+    """Represents the authenticated caller.
+
+    Attributes:
+        oid (str | None): Object ID of the user or service principal.
+        name (str | None): Display name.
+        preferred_username (str | None): UPN or email-like identifier.
+        roles (list[str]): App roles granted to the caller.
+    """
+
+    oid: str | None
+    name: str | None
+    preferred_username: str | None
+    roles: list[str]
+
+    @classmethod
+    def from_user(cls, user: User) -> CurrentUserDTO:
+        """Builds the response representation from a validated Entra ID user.
+
+        Args:
+            user (User): Caller resolved by `azure_scheme`.
+
+        Returns:
+            CurrentUserDTO: Response representation of the caller.
+        """
+
+        return cls(
+            oid=user.oid,
+            name=user.name,
+            preferred_username=user.preferred_username,
+            roles=user.roles,
+        )
+
+
+{% endif %}
 class HealthDTO(BaseModel):
     """Represents service health.
 
@@ -62,7 +102,9 @@ class HealthDTO(BaseModel):
         queue_backend (str): Queue backend name.
         queue_healthy (bool): Queue reachability flag.
         database_healthy (bool): Whether the database responded to a liveness query.
+{% if enable_telemetry %}
         telemetry_enabled (bool): Whether OpenTelemetry is enabled.
+{% endif %}
         scope_count (int): Number of configured scopes.
     """
 
@@ -70,7 +112,9 @@ class HealthDTO(BaseModel):
     queue_backend: str
     queue_healthy: bool
     database_healthy: bool
+{% if enable_telemetry %}
     telemetry_enabled: bool
+{% endif %}
     scope_count: int
 
 

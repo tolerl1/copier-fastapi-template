@@ -34,6 +34,13 @@ jobs:
     env:
       {{ env_prefix }}TEST_DATABASE_URL: postgresql+asyncpg://{{ package_name }}:{{ package_name }}@localhost:5432/{{ package_name }}_test
       {{ env_prefix }}TEST_REDIS_URL: redis://localhost:6379/1
+{% if enable_azure_auth %}
+      # core/auth.py builds azure_scheme at import time, so these must be
+      # set even though tests override azure_scheme rather than validating
+      # real tokens against a real tenant.
+      {{ env_prefix }}AZURE_TENANT_ID: 00000000-0000-0000-0000-000000000000
+      {{ env_prefix }}AZURE_CLIENT_ID: 00000000-0000-0000-0000-000000000001
+{% endif %}
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -57,7 +64,7 @@ jobs:
         run: uv run ruff format --check .
 
       - name: Type check
-        run: uv run ty check
+        run: uv run pyright
 
       - name: Run tests
         run: uv run pytest

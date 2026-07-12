@@ -65,7 +65,9 @@ async def app() -> AsyncIterator[FastAPI]:
     """
 
     settings = Settings(
+{% if enable_telemetry %}
         telemetry_enabled=False,
+{% endif %}
         queue_backend="memory",
         database_url=TEST_DATABASE_URL,
         scopes=[
