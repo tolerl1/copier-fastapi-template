@@ -132,8 +132,9 @@ _exclude:
   - "{% if not include_example_endpoint %}src/{{ package_name }}/database/repositories.py{% endif %}"
   - "{% if not include_example_endpoint %}tests/{{ package_name }}/api/test_items.py{% endif %}"
   - "{% if not include_example_endpoint %}tests/{{ package_name }}/database/test_repositories.py{% endif %}"
-  - "{% if not include_example_endpoint %}alembic/versions/0001_create_items_table.py.jinja{% endif %}"
+  - "{% if not include_example_endpoint %}alembic/versions/0001_create_items_table.py{% endif %}"
   - "{% if not enable_telemetry %}src/{{ package_name }}/core/telemetry.py{% endif %}"
+  - "{% if not enable_telemetry %}tests/{{ package_name }}/core/test_telemetry.py{% endif %}"
   - "{% if not enable_azure_auth %}src/{{ package_name }}/core/auth.py{% endif %}"
   - "{% if not enable_azure_auth %}tests/{{ package_name }}/api/test_auth.py{% endif %}"
 

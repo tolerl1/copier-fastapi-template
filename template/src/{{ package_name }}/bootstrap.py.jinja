@@ -5,6 +5,9 @@ from __future__ import annotations
 from {{ package_name }}.api.models import ScopeDefinition, ScopeRegistry
 from {{ package_name }}.api.services import HealthService, {% if include_example_endpoint %}ItemService, {% endif %}TaskDispatcher
 from {{ package_name }}.container import ServiceContainer
+{% if enable_azure_auth %}
+from {{ package_name }}.core.auth import build_azure_scheme
+{% endif %}
 from {{ package_name }}.core.config import Settings
 from {{ package_name }}.database.queues import create_task_queue
 {% if include_example_endpoint %}
@@ -52,4 +55,7 @@ def build_container(settings: Settings | None = None) -> ServiceContainer:
             scope_registry=scope_registry,
         ),
         task_queue=task_queue,
+{% if enable_azure_auth %}
+        azure_scheme=build_azure_scheme(resolved_settings),
+{% endif %}
     )

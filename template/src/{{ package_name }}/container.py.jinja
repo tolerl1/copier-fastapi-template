@@ -10,7 +10,9 @@ container actually needs to be built (currently just `main.py`).
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, TypedDict
+from typing import TYPE_CHECKING, Annotated, TypedDict, cast
+
+from fastapi import Depends, Request
 
 if TYPE_CHECKING:
     from {{ package_name }}.api.models import ScopeRegistry, TaskQueue
@@ -21,6 +23,10 @@ if TYPE_CHECKING:
 {% endif %}
         TaskDispatcher,
     )
+{% if enable_azure_auth %}
+    from fastapi_azure_auth import SingleTenantAzureAuthorizationCodeBearer
+
+{% endif %}
     from {{ package_name }}.core.config import Settings
     from {{ package_name }}.database.session import DatabaseSessionManager
 
@@ -39,6 +45,10 @@ class ServiceContainer:
 {% endif %}
         task_dispatcher (TaskDispatcher): Long-running task dispatcher.
         task_queue (TaskQueue): Queue backend adapter.
+{% if enable_azure_auth %}
+        azure_scheme (SingleTenantAzureAuthorizationCodeBearer): JWT-validation
+            dependency, built from this container's own settings.
+{% endif %}
     """
 
     settings: Settings
@@ -50,6 +60,9 @@ class ServiceContainer:
 {% endif %}
     task_dispatcher: TaskDispatcher
     task_queue: TaskQueue
+{% if enable_azure_auth %}
+    azure_scheme: SingleTenantAzureAuthorizationCodeBearer
+{% endif %}
 
     async def shutdown(self) -> None:
         """Releases container resources.
@@ -70,3 +83,26 @@ class ContainerState(TypedDict):
     """
 
     container: ServiceContainer
+
+
+def get_container(request: Request) -> ServiceContainer:
+    """Returns the application container.
+
+    Defined here (rather than in `api/dependencies.py`) so modules that need
+    request-scoped access to the container — like `core/auth.py` — can
+    depend on it without importing from `api/dependencies.py` and creating a
+    circular import.
+
+    Args:
+        request (Request): Current request. Keep this unparameterized —
+            `Request[ContainerState]` breaks FastAPI's special-cased
+            injection of the raw ASGI request.
+
+    Returns:
+        ServiceContainer: Application service container.
+    """
+
+    return cast(ServiceContainer, request.state.container)
+
+
+ContainerDep = Annotated[ServiceContainer, Depends(get_container)]

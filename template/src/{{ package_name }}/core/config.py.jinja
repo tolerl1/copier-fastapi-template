@@ -69,7 +69,9 @@ class Settings(BaseSettings):
     environment: str = "development"
     host: str = "0.0.0.0"
     port: int = 8000
-    database_url: str = "postgresql+asyncpg:///{{ package_name }}"
+    database_url: str = (
+        "postgresql+asyncpg://{{ package_name }}:{{ package_name }}@localhost:5432/{{ package_name }}"
+    )
     db_pool_size: int = 5
     db_max_overflow: int = 10
     log_level: str = "INFO"

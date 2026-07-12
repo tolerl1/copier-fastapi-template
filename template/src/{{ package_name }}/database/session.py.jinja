@@ -136,14 +136,19 @@ class DatabaseSessionManager:
 
     @asynccontextmanager
     async def session(self) -> AsyncIterator[AsyncSession]:
-        """Creates an async session.
+        """Creates an async session, committing on success and rolling back on error.
 
         Returns:
             AsyncIterator[AsyncSession]: Managed async session.
         """
 
         async with self._session_factory() as session:
-            yield session
+            try:
+                yield session
+                await session.commit()
+            except Exception:
+                await session.rollback()
+                raise
 
     async def dispose(self) -> None:
         """Disposes the shared engine.

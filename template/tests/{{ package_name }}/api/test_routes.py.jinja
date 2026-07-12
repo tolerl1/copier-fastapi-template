@@ -3,6 +3,10 @@
 from __future__ import annotations
 
 import pytest
+{% if enable_azure_auth %}
+
+from {{ package_name }}.core.auth import get_current_user
+{% endif %}
 
 
 @pytest.mark.asyncio
@@ -26,7 +30,7 @@ async def test_health_check_endpoint(client) -> None:
 
 
 @pytest.mark.asyncio
-async def test_dispatch_endpoint_accepts_long_running_tasks(client) -> None:
+async def test_dispatch_endpoint_accepts_long_running_tasks({% if enable_azure_auth %}app, {% endif %}client) -> None:
     """Verifies the task dispatch endpoint.
 
     Args:
@@ -35,6 +39,9 @@ async def test_dispatch_endpoint_accepts_long_running_tasks(client) -> None:
     Returns:
         None: Assertions validate the endpoint response.
     """
+{% if enable_azure_auth %}
+    app.dependency_overrides[get_current_user] = lambda: object()
+{% endif %}
 
     async with client.post(
         "/tasks/dispatch",

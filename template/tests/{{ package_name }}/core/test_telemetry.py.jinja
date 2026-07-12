@@ -1,0 +1,31 @@
+"""Tests for OpenTelemetry instrumentation wiring."""
+
+from __future__ import annotations
+
+import aiohttp
+import pytest
+from opentelemetry import trace
+from opentelemetry.sdk.trace import TracerProvider
+
+
+@pytest.mark.asyncio
+async def test_telemetry_instruments_the_app(client: aiohttp.ClientSession) -> None:
+    """Verifies telemetry is configured and doesn't break request handling.
+
+    Uses the console span exporter (no OTLP endpoint configured), so this
+    doesn't depend on a running collector.
+
+    Args:
+        client: Async test client, built from an app with telemetry enabled.
+
+    Returns:
+        None: Assertions validate tracer provider setup and request handling.
+    """
+
+    assert isinstance(trace.get_tracer_provider(), TracerProvider)
+
+    async with client.get("/health") as response:
+        payload = await response.json()
+
+        assert response.status == 200
+        assert payload["telemetry_enabled"] is True

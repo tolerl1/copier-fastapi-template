@@ -169,6 +169,12 @@ class AzureStorageQueueTaskQueue:
     async def enqueue(self, task: QueuedTask) -> None:
         """Queues a task in Azure Storage Queue.
 
+        Delivery is at-least-once, like the other backends: if the send
+        succeeds but the response is lost, a caller-level retry enqueues a
+        duplicate with a new `task_id`. Consumers that can't tolerate
+        duplicate processing need their own idempotency key derived from
+        task content, not `task_id`.
+
         Args:
             task (QueuedTask): Task to enqueue.
 
