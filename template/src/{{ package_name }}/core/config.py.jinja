@@ -29,6 +29,9 @@ class Settings(BaseSettings):
         host (str): Interface Uvicorn binds to when run via `serve()`.
         port (int): Port Uvicorn binds to when run via `serve()`.
         database_url (str): Async SQLAlchemy connection string using asyncpg.
+        db_pool_size (int): Persistent database connections kept per worker.
+        db_max_overflow (int): Extra database connections allowed beyond
+            `db_pool_size` under load.
         log_level (str): Root logging level, including TRACE support.
 {% if enable_telemetry %}
         telemetry_enabled (bool): Enables OpenTelemetry instrumentation.
@@ -67,6 +70,8 @@ class Settings(BaseSettings):
     host: str = "0.0.0.0"
     port: int = 8000
     database_url: str = "postgresql+asyncpg:///{{ package_name }}"
+    db_pool_size: int = 5
+    db_max_overflow: int = 10
     log_level: str = "INFO"
 {% if enable_telemetry %}
     telemetry_enabled: bool = True

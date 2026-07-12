@@ -4,19 +4,16 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from datetime import datetime
 
-from sqlalchemy import MetaData
+from sqlalchemy import MetaData, func
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
     async_sessionmaker,
     create_async_engine,
 )
-{% if include_example_endpoint %}
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
-{% else %}
-from sqlalchemy.orm import DeclarativeBase
-{% endif %}
 
 NAMING_CONVENTION = {
     "ix": "ix_%(column_0_label)s",
@@ -31,6 +28,20 @@ class Base(DeclarativeBase):
     """Declarative base for ORM models."""
 
     metadata = MetaData(naming_convention=NAMING_CONVENTION)
+
+
+class TimestampMixin:
+    """Adds database-populated creation/update timestamps to a model.
+
+    Attributes:
+        created_at (datetime): Row creation timestamp, set by the database.
+        updated_at (datetime): Row last-update timestamp, set by the database.
+    """
+
+    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        server_default=func.now(), onupdate=func.now()
+    )
 
 
 {% if include_example_endpoint %}
@@ -59,17 +70,31 @@ class DatabaseSessionManager:
         _session_factory (async_sessionmaker[AsyncSession]): Session factory.
     """
 
-    def __init__(self, database_url: str) -> None:
+    def __init__(
+        self,
+        database_url: str,
+        *,
+        pool_size: int = 5,
+        max_overflow: int = 10,
+    ) -> None:
         """Creates the session manager.
 
         Args:
             database_url (str): Async database URL.
+            pool_size (int): Persistent connections kept per worker.
+            max_overflow (int): Extra connections allowed beyond `pool_size`
+                under load.
 
         Returns:
             None: The manager is initialized in-place.
         """
 
-        self._engine = create_async_engine(database_url, pool_pre_ping=True)
+        self._engine = create_async_engine(
+            database_url,
+            pool_pre_ping=True,
+            pool_size=pool_size,
+            max_overflow=max_overflow,
+        )
         self._session_factory = async_sessionmaker(self._engine, expire_on_commit=False)
 
     @property

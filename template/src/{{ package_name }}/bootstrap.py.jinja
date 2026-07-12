@@ -30,7 +30,11 @@ def build_container(settings: Settings | None = None) -> ServiceContainer:
             for scope in resolved_settings.scopes
         ]
     )
-    session_manager = DatabaseSessionManager(resolved_settings.database_url)
+    session_manager = DatabaseSessionManager(
+        resolved_settings.database_url,
+        pool_size=resolved_settings.db_pool_size,
+        max_overflow=resolved_settings.db_max_overflow,
+    )
     task_queue = create_task_queue(resolved_settings)
     return ServiceContainer(
         settings=resolved_settings,
