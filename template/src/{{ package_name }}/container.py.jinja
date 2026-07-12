@@ -65,10 +65,6 @@ class ServiceContainer:
 class ContainerState(TypedDict):
     """Types the ASGI scope state `main.lifespan` yields.
 
-    `api/dependencies.get_container` casts `request.state` to this so
-    `state["container"]` type-checks, without parameterizing `Request`
-    itself (that breaks FastAPI's special-cased request injection).
-
     Attributes:
         container (ServiceContainer): Application service container.
     """
