@@ -10,12 +10,19 @@ you'd rather pre-warm that cache during startup instead (it needs live
 network access to Microsoft's endpoints, which is why it isn't wired into
 `main.py`'s lifespan by default: it would make every test that builds an
 app, not just auth tests, depend on that network call succeeding).
+
+Role checking (`check_role`) is kept separate from identity resolution
+(`azure_scheme`): it only assumes the resolved caller exposes a `roles`
+list, not that the caller came from Entra ID. Swapping in another
+JWT-based provider later (e.g. AWS Cognito, Sign in with Apple) means
+writing a new identity-resolution dependency to replace `azure_scheme` —
+`check_role`/`require_role` keep working unchanged.
 """
 
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
-from typing import Annotated
+from typing import Annotated, Protocol
 
 from fastapi import Depends, HTTPException, status
 from fastapi_azure_auth import SingleTenantAzureAuthorizationCodeBearer
@@ -41,6 +48,38 @@ azure_scheme = SingleTenantAzureAuthorizationCodeBearer(
 )
 
 
+class _HasRoles(Protocol):
+    """Anything an identity dependency resolves to that carries app roles."""
+
+    roles: list[str]
+
+
+def check_role[T: _HasRoles](role: str, user: T) -> T:
+    """Checks a resolved caller for a required role.
+
+    Provider-agnostic: works against whatever an identity dependency
+    resolves to, as long as it exposes a `roles` list — Entra ID's
+    `User.roles`, or the equivalent claim from another OIDC provider.
+
+    Args:
+        role (str): Role name to require.
+        user (_HasRoles): Caller resolved by an identity dependency.
+
+    Returns:
+        _HasRoles: The same caller, once authorized.
+
+    Raises:
+        HTTPException: 403 if the caller lacks the required role.
+    """
+
+    if role not in user.roles:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Missing required role: {role}",
+        )
+    return user
+
+
 def require_role(role: str) -> Callable[..., Awaitable[User]]:
     """Builds a dependency that requires a specific Entra ID app role.
 
@@ -56,7 +95,7 @@ def require_role(role: str) -> Callable[..., Awaitable[User]]:
     """
 
     async def _require_role(user: Annotated[User, Depends(azure_scheme)]) -> User:
-        """Checks the resolved user for the required role.
+        """Resolves the caller via `azure_scheme` and checks their role.
 
         Args:
             user (User): Caller resolved by `azure_scheme`.
@@ -68,12 +107,7 @@ def require_role(role: str) -> Callable[..., Awaitable[User]]:
             HTTPException: 403 if the caller lacks the required role.
         """
 
-        if role not in user.roles:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"Missing required role: {role}",
-            )
-        return user
+        return check_role(role, user)
 
     return _require_role
 
