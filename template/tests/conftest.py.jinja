@@ -75,9 +75,7 @@ async def app() -> AsyncIterator[FastAPI]:
             ScopeSettings(name="billing", description="Billing workflows."),
         ],
     )
-    test_app = create_app(settings)
-    yield test_app
-    await test_app.state.container.shutdown()
+    yield create_app(settings)
 
 
 @pytest_asyncio.fixture

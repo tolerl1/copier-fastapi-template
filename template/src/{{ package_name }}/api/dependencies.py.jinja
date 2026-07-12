@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
-from typing import Annotated
+from typing import Annotated, cast
 
 from fastapi import Depends, HTTPException, Request, status
 {% if enable_azure_auth %}
@@ -16,20 +16,23 @@ from {{ package_name }}.api.services import HealthService, {% if include_example
 {% if enable_azure_auth %}
 from {{ package_name }}.core.auth import azure_scheme, require_admin_role
 {% endif %}
-from {{ package_name }}.container import ServiceContainer
+from {{ package_name }}.container import ContainerState, ServiceContainer
 
 
 def get_container(request: Request) -> ServiceContainer:
     """Returns the application container.
 
     Args:
-        request (Request): Current request.
+        request (Request): Current request. Keep this unparameterized —
+            `Request[ContainerState]` breaks FastAPI's special-cased
+            injection of the raw ASGI request.
 
     Returns:
         ServiceContainer: Application service container.
     """
 
-    return request.app.state.container
+    state = cast(ContainerState, request.state)
+    return state["container"]
 
 
 ContainerDep = Annotated[ServiceContainer, Depends(get_container)]
