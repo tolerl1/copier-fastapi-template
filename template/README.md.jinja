@@ -304,8 +304,7 @@ against Entra ID themselves and send the resulting access token as
    route below expects one named `Admin`), then assign them to users/groups/
    service principals in Enterprise Applications.
 4. Set `{{ env_prefix }}AZURE_TENANT_ID` and `{{ env_prefix }}AZURE_CLIENT_ID` in `.env` — the
-   app raises a clear `pydantic.ValidationError` at startup if either is
-   missing.
+   app raises a clear `RuntimeError` at startup if either is missing.
 5. If you also want Swagger UI's "Authorize" button to work, register a
    separate public client (SPA) app registration for it and set
    `{{ env_prefix }}AZURE_OPENAPI_CLIENT_ID`; otherwise it falls back to

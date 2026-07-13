@@ -45,10 +45,9 @@ class ItemService:
         """
 
         offset = (page - 1) * page_size
-        items = await self._repository.list_items(
+        items, total = await self._repository.list_items_with_total(
             session, offset=offset, limit=page_size
         )
-        total = await self._repository.count_items(session)
         return PaginatedItemsDTO(
             items=[ItemDTO.from_item(item) for item in items],
             page=page,

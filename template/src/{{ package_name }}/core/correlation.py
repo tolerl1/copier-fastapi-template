@@ -5,13 +5,9 @@ from __future__ import annotations
 import contextvars
 import logging
 import uuid
-from collections.abc import Awaitable, Callable
-from typing import override
 
-from fastapi import Request
-from starlette.background import BackgroundTask
-from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.responses import Response
+from starlette.datastructures import MutableHeaders
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 LOGGER = logging.getLogger(__name__)
 
@@ -47,61 +43,67 @@ def set_correlation_id(correlation_id: str) -> None:
     _correlation_id_var.set(correlation_id)
 
 
-async def _reset_correlation_id_after_response(
-    background_task: BackgroundTask | None,
-    token: contextvars.Token[str],
-) -> None:
-    """Resets the correlation ID after the response has fully completed.
+class CorrelationIdMiddleware:
+    """ASGI middleware that generates and propagates correlation IDs.
 
-    Args:
-        background_task (BackgroundTask | None): Existing response background task.
-        token (contextvars.Token[str]): Token used to restore the previous value.
-
-    Returns:
-        None: Cleanup is performed after the response completes.
-    """
-
-    try:
-        if background_task is not None:
-            await background_task()
-    finally:
-        _correlation_id_var.reset(token)
-
-
-class CorrelationIdMiddleware(BaseHTTPMiddleware):
-    """Middleware to generate and propagate correlation IDs for requests.
-
-    This middleware generates a correlation ID for each incoming request, stores it
-    in context variables for logging, and includes it in response headers.
+    Generates a correlation ID for each incoming HTTP request, stores it in a
+    context variable for logging, and includes it in the response headers.
     Caller-supplied correlation/request ID headers are intentionally ignored.
+
+    Implemented as a plain ASGI middleware rather than
+    `starlette.middleware.base.BaseHTTPMiddleware`: `BaseHTTPMiddleware` runs
+    the downstream app in a separate task and is documented to lose client
+    disconnects (the handler keeps running instead of being cancelled) and to
+    add response-buffering overhead. A raw ASGI middleware wraps the
+    downstream `send` calls directly, so `await self.app(...)` doesn't return
+    until the response — including any background task — has actually
+    finished, and a single `try`/`finally` around it is enough to reset the
+    context variable correctly on every path, including cancellation.
+
+    Attributes:
+        app (ASGIApp): Downstream ASGI application.
     """
 
-    @override
-    async def dispatch(
-        self, request: Request, call_next: Callable[[Request], Awaitable[Response]]
-    ) -> Response:
-        """Processes the request and injects correlation ID.
+    def __init__(self, app: ASGIApp) -> None:
+        """Wraps the downstream ASGI application.
 
         Args:
-            request (Request): Incoming HTTP request.
-            call_next (Callable[[Request], Awaitable[Response]]): Next
-                middleware/route handler.
+            app (ASGIApp): Downstream ASGI application.
 
         Returns:
-            Response: HTTP response with correlation ID header.
+            None: The middleware is initialized in-place.
         """
 
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        """Processes the request and injects a correlation ID.
+
+        Args:
+            scope (Scope): ASGI connection scope.
+            receive (Receive): ASGI receive callable.
+            send (Send): ASGI send callable.
+
+        Returns:
+            None: The response is sent through `send`, with the correlation
+                ID header attached.
+        """
+
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
         correlation_id = str(uuid.uuid4())
+
+        async def send_with_correlation_id(message: Message) -> None:
+            if message["type"] == "http.response.start":
+                headers = MutableHeaders(scope=message)
+                headers.append(CORRELATION_ID_HEADER, correlation_id)
+            await send(message)
 
         token = _correlation_id_var.set(correlation_id)
         try:
             LOGGER.debug("Correlation ID: %s", correlation_id)
-            response = await call_next(request)
-        except Exception:
+            await self.app(scope, receive, send_with_correlation_id)
+        finally:
             _correlation_id_var.reset(token)
-            raise
-        response.headers[CORRELATION_ID_HEADER] = correlation_id
-        response.background = BackgroundTask(
-            _reset_correlation_id_after_response, response.background, token
-        )
-        return response

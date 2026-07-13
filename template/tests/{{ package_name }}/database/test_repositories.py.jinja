@@ -60,3 +60,48 @@ async def test_item_repository_honors_offset_and_limit() -> None:
     ]
     assert [item.name for item in second_page] == ["Example Item 3"]
     await session_manager.dispose()
+
+
+@pytest.mark.asyncio
+async def test_item_repository_lists_with_total_in_one_query() -> None:
+    """Verifies list_items_with_total pages items and reports the total.
+
+    Returns:
+        None: Assertions validate combined paginate-and-count behavior.
+    """
+
+    session_manager = DatabaseSessionManager(TEST_DATABASE_URL)
+    repository = SqlAlchemyItemRepository()
+
+    async with session_manager.session() as session:
+        items, total = await repository.list_items_with_total(
+            session, offset=0, limit=2
+        )
+
+    assert [item.name for item in items] == [
+        "Example Item 1",
+        "Example Item 2",
+    ]
+    assert total == 3
+    await session_manager.dispose()
+
+
+@pytest.mark.asyncio
+async def test_item_repository_lists_with_total_on_empty_page() -> None:
+    """Verifies list_items_with_total falls back to a count for an empty page.
+
+    Returns:
+        None: Assertions validate the out-of-range-page fallback path.
+    """
+
+    session_manager = DatabaseSessionManager(TEST_DATABASE_URL)
+    repository = SqlAlchemyItemRepository()
+
+    async with session_manager.session() as session:
+        items, total = await repository.list_items_with_total(
+            session, offset=100, limit=20
+        )
+
+    assert items == ()
+    assert total == 3
+    await session_manager.dispose()
