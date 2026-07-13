@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from {{ package_name }}.application.dependencies import get_item_service
-from {{ package_name }}.application.services import ItemService
+from {{ package_name }}.application.items.dependencies import get_item_service
+from {{ package_name }}.application.items.services import ItemService
 from {{ package_name }}.bootstrap import build_container
 from {{ package_name }}.core.config import Settings
 {% if enable_azure_auth %}

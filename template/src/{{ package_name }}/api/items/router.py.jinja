@@ -1,0 +1,53 @@
+"""FastAPI router for the example /items endpoint."""
+
+from __future__ import annotations
+
+from typing import Annotated
+
+from fastapi import (
+    APIRouter,
+{% if enable_azure_auth %}
+    Depends,
+{% endif %}
+    Query,
+)
+
+from {{ package_name }}.application.dependencies import DbSessionDep
+from {{ package_name }}.application.items.dependencies import ItemServiceDep
+from {{ package_name }}.application.items.schemas import PaginatedItemsDTO
+{% if enable_azure_auth %}
+from {{ package_name }}.core.auth import get_current_user
+{% endif %}
+
+items_router = APIRouter(
+    prefix="/items",
+    tags=["examples"],
+{% if enable_azure_auth %}
+    dependencies=[Depends(get_current_user)],
+{% endif %}
+)
+
+
+@items_router.get("")
+async def list_items(
+    item_service: ItemServiceDep,
+    session: DbSessionDep,
+    page: Annotated[int, Query(ge=1)] = 1,
+    page_size: Annotated[int, Query(ge=1, le=100)] = 20,
+) -> PaginatedItemsDTO:
+    """Lists example items.
+
+    This endpoint demonstrates how to back a GET endpoint with pagination and a
+    request-scoped database session. Replace this with your own domain logic.
+
+    Args:
+        item_service (ItemService): Injected item service.
+        session (AsyncSession): Injected request-scoped database session.
+        page (int): One-based page number.
+        page_size (int): Page size with a maximum of 100.
+
+    Returns:
+        PaginatedItemsDTO: Paginated items.
+    """
+
+    return await item_service.page(session, page=page, page_size=page_size)

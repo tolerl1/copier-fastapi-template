@@ -1,7 +1,7 @@
 # Claude Instructions
 
 - Use `uv sync` to install dependencies and `uv run` for all project commands.
-- Organize code using the existing layering: `application` (models, schemas, services, dependencies), `core` (config, logging{% if enable_telemetry %}, telemetry{% endif %}), `database` (session, queues{% if include_example_endpoint %}, repositories{% endif %}), and `api` (routers).
+- Organize code using the existing layering: `application` (models, schemas, services, dependencies), `core` (config, logging{% if enable_telemetry %}, telemetry{% endif %}), `database` (session, queues{% if include_example_endpoint %}, repositories{% endif %}), and `api` (routers).{% if include_example_endpoint %} A domain that grows beyond a couple of files gets its own `application/<domain>/` and `api/<domain>/router.py`, following the `items` example — cross-cutting code (`HealthService`, `ScopeRegistry`, `TaskQueue`) stays in the shared `application/` files, and single-endpoint routers stay directly in `api/router.py` rather than getting their own folder.{% endif %}
 - Do not bypass dependency injection; the `ServiceContainer` shape lives in `container.py`, built by `bootstrap.py`. Extend both together, and keep `container.py` free of runtime imports from `application`/`database` (`TYPE_CHECKING` only) — that's what keeps `application/dependencies.py` from having to import the whole service graph just to type-hint the container.
 - Add or update scopes through `Settings.scopes` and `ScopeRegistry`.
 - Keep request handlers non-blocking and move long-running work to the configured queue backend.

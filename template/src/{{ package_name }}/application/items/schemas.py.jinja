@@ -1,0 +1,50 @@
+"""Request/response schemas for example items."""
+
+from __future__ import annotations
+
+from pydantic import BaseModel
+
+from {{ package_name }}.application.items.models import Item
+
+
+class ItemDTO(BaseModel):
+    """Represents an example item.
+
+    Attributes:
+        id (str): Item identifier.
+        name (str): Item name.
+        description (str): Item description.
+    """
+
+    id: str
+    name: str
+    description: str
+
+    @classmethod
+    def from_item(cls, item: Item) -> ItemDTO:
+        """Converts a domain item to its response representation.
+
+        Args:
+            item (Item): Domain item.
+
+        Returns:
+            ItemDTO: Response representation of the item.
+        """
+
+        return cls(id=item.id, name=item.name, description=item.description)
+
+
+class PaginatedItemsDTO(BaseModel):
+    """Represents a paginated item list.
+
+    Attributes:
+        items (list[ItemDTO]): Items for the current page.
+        page (int): One-based page number.
+        page_size (int): Page size after validation.
+        total (int): Total number of items before pagination.
+    """
+
+    items: list[ItemDTO]
+    page: int
+    page_size: int
+    total: int

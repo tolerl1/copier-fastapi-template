@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 from {{ package_name }}.application.models import ScopeDefinition, ScopeRegistry
-from {{ package_name }}.application.services import HealthService, {% if include_example_endpoint %}ItemService, {% endif %}TaskDispatcher
+from {{ package_name }}.application.services import HealthService, TaskDispatcher
+{% if include_example_endpoint %}
+from {{ package_name }}.application.items.services import ItemService
+{% endif %}
 from {{ package_name }}.container import ServiceContainer
 {% if enable_azure_auth %}
 from {{ package_name }}.core.auth import build_azure_scheme

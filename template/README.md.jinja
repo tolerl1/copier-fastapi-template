@@ -47,11 +47,17 @@ Built with `uv`, `prek`, Ruff, `pyright`, `pyupgrade`, async SQLAlchemy, Alembic
 ```text
 src/{{ package_name }}/
   application/
-    models.py          # Domain models{% if include_example_endpoint %}: items, scope registry, task queues{% else %}: scope registry, task queues{% endif %}
-
-    schemas.py         # Request/response DTOs
-    services.py        # Application services
-    dependencies.py    # Dependency injection helpers (Annotated Dep aliases)
+    models.py          # Cross-cutting domain models: scope registry, task queues
+    schemas.py         # Cross-cutting request/response DTOs
+    services.py        # Cross-cutting application services
+    dependencies.py    # Shared dependency injection helpers (Annotated Dep aliases)
+{% if include_example_endpoint -%}
+    items/               # Everything item-domain-specific
+      models.py            # Item
+      schemas.py            # ItemDTO, PaginatedItemsDTO
+      services.py            # ItemService
+      dependencies.py         # get_item_service, ItemServiceDep
+{% endif -%}
   core/
     config.py          # Configuration
     logging.py          # Structured logging
@@ -68,7 +74,11 @@ src/{{ package_name }}/
     repositories.py      # Repository implementations
 {% endif -%}
   api/
-    router.py           # Per-domain API routers (system{% if enable_azure_auth %}, auth{% endif %}{% if include_example_endpoint %}, items{% endif %}, tasks)
+    router.py           # Top-level composition: system{% if enable_azure_auth %}, auth{% endif %} and tasks routers{% if include_example_endpoint %}, plus items_router{% endif %}, wired into one `router`
+{% if include_example_endpoint -%}
+    items/
+      router.py            # items_router (/items)
+{% endif -%}
   main.py                # Application entrypoint
   container.py            # ServiceContainer shape (no service imports at runtime)
   bootstrap.py            # Builds a ServiceContainer from Settings
@@ -96,6 +106,22 @@ are `TYPE_CHECKING`-only imports); `bootstrap.py` does the actual wiring and
 is the only module that imports the concrete services. Request-time code
 (`application/dependencies.py`) imports `container.py`, not `bootstrap.py`, so it
 never pulls in the full service graph just to get the container's shape.
+
+{% if include_example_endpoint %}
+### Adding a new domain
+
+`items` is the template for grouping a growing domain's code together:
+production code for a domain gets its own `application/<domain>/` folder
+(models, schemas, services, dependencies) and its own `api/<domain>/router.py`,
+while `api/router.py` just imports each domain's router and composes them
+into one `router`. Cross-cutting things that don't belong to a single
+domain — `HealthService`, `TaskQueue`, `ScopeRegistry` — stay in the shared
+`application/` files instead of being forced into a domain folder. Not
+every route needs this treatment: a single-endpoint router (like `/health`
+or `/tasks/dispatch`) is fine defined directly in `api/router.py`; reach for
+a domain folder once there's enough model/schema/service/route code to be
+worth grouping.
+{% endif %}
 
 ## Quick start
 

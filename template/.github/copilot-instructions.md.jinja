@@ -1,7 +1,7 @@
 # GitHub Copilot Instructions
 
 - Use `uv` for dependency management, virtual environments, and command execution.
-- Preserve the layering: `application` (models, schemas, services, dependencies), `core` (config, logging{% if enable_telemetry %}, telemetry{% endif %}{% if enable_azure_auth %}, auth{% endif %}), `database` (session, queues{% if include_example_endpoint %}, repositories{% endif %}), and `api` (routers).
+- Preserve the layering: `application` (models, schemas, services, dependencies), `core` (config, logging{% if enable_telemetry %}, telemetry{% endif %}{% if enable_azure_auth %}, auth{% endif %}), `database` (session, queues{% if include_example_endpoint %}, repositories{% endif %}), and `api` (routers).{% if include_example_endpoint %} Domains that grow beyond a couple of files get their own `application/<domain>/` and `api/<domain>/router.py` (see `items`); keep cross-cutting code in the shared `application/` files and single-endpoint routers directly in `api/router.py`.{% endif %}
 - Keep all HTTP handlers asynchronous.
 - Use SQLAlchemy ORM with `asyncpg`; do not introduce synchronous database access.
 - Add Google-style docstrings with explicit types for attributes, arguments, and returns.

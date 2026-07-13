@@ -2,17 +2,10 @@
 
 from __future__ import annotations
 
-{% if include_example_endpoint %}
-from typing import Annotated
-{% endif %}
-
 from fastapi import (
     APIRouter,
 {% if enable_azure_auth %}
     Depends,
-{% endif %}
-{% if include_example_endpoint %}
-    Query,
 {% endif %}
 )
 
@@ -21,13 +14,7 @@ from {{ package_name }}.application.dependencies import (
     AdminUserDep,
     CurrentUserDep,
 {% endif %}
-{% if include_example_endpoint %}
-    DbSessionDep,
-{% endif %}
     HealthServiceDep,
-{% if include_example_endpoint %}
-    ItemServiceDep,
-{% endif %}
     TaskDispatcherDep,
     raise_unknown_scope,
 )
@@ -39,10 +26,10 @@ from {{ package_name }}.application.schemas import (
     DispatchTaskRequest,
     DispatchTaskResponse,
     HealthDTO,
-{% if include_example_endpoint %}
-    PaginatedItemsDTO,
-{% endif %}
 )
+{% if include_example_endpoint %}
+from {{ package_name }}.api.items.router import items_router
+{% endif %}
 {% if enable_azure_auth %}
 from {{ package_name }}.core.auth import get_current_user
 {% endif %}
@@ -50,15 +37,6 @@ from {{ package_name }}.core.auth import get_current_user
 system_router = APIRouter(tags=["system"])
 {% if enable_azure_auth %}
 auth_router = APIRouter(prefix="/auth", tags=["auth"])
-{% endif %}
-{% if include_example_endpoint %}
-items_router = APIRouter(
-    prefix="/items",
-    tags=["examples"],
-{% if enable_azure_auth %}
-    dependencies=[Depends(get_current_user)],
-{% endif %}
-)
 {% endif %}
 tasks_router = APIRouter(
     prefix="/tasks",
@@ -118,33 +96,6 @@ async def admin_only(user: AdminUserDep) -> CurrentUserDTO:
     """
 
     return CurrentUserDTO.from_user(user)
-
-
-{% endif %}
-{% if include_example_endpoint %}
-@items_router.get("")
-async def list_items(
-    item_service: ItemServiceDep,
-    session: DbSessionDep,
-    page: Annotated[int, Query(ge=1)] = 1,
-    page_size: Annotated[int, Query(ge=1, le=100)] = 20,
-) -> PaginatedItemsDTO:
-    """Lists example items.
-
-    This endpoint demonstrates how to back a GET endpoint with pagination and a
-    request-scoped database session. Replace this with your own domain logic.
-
-    Args:
-        item_service (ItemService): Injected item service.
-        session (AsyncSession): Injected request-scoped database session.
-        page (int): One-based page number.
-        page_size (int): Page size with a maximum of 100.
-
-    Returns:
-        PaginatedItemsDTO: Paginated items.
-    """
-
-    return await item_service.page(session, page=page, page_size=page_size)
 
 
 {% endif %}

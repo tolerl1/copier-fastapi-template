@@ -17,13 +17,10 @@ from fastapi import Depends, Request
 
 if TYPE_CHECKING:
     from {{ package_name }}.application.models import ScopeRegistry, TaskQueue
-    from {{ package_name }}.application.services import (
-        HealthService,
+    from {{ package_name }}.application.services import HealthService, TaskDispatcher
 {% if include_example_endpoint %}
-        ItemService,
+    from {{ package_name }}.application.items.services import ItemService
 {% endif %}
-        TaskDispatcher,
-    )
 {% if enable_azure_auth %}
     from fastapi_azure_auth import SingleTenantAzureAuthorizationCodeBearer
 
