@@ -51,34 +51,34 @@ src/{{ package_name }}/
     schemas.py         # Cross-cutting request/response DTOs
     services.py        # Cross-cutting application services
     dependencies.py    # Shared dependency injection helpers (Annotated Dep aliases)
-{% if include_example_endpoint -%}
+{% if include_example_endpoint %}
     items/               # Everything item-domain-specific
       models.py            # Item
       schemas.py            # ItemDTO, PaginatedItemsDTO
       services.py            # ItemService
       dependencies.py         # get_item_service, ItemServiceDep
-{% endif -%}
+{% endif %}
   core/
     config.py          # Configuration
     logging.py          # Structured logging
-{% if enable_telemetry -%}
+{% if enable_telemetry %}
     telemetry.py        # OpenTelemetry tracing
-{% endif -%}
-{% if enable_azure_auth -%}
+{% endif %}
+{% if enable_azure_auth %}
     auth.py              # azure_scheme JWT validation + require_role()
-{% endif -%}
+{% endif %}
   database/
     session.py          # SQLAlchemy session management and ORM models
     queues.py            # Queue backend adapters
-{% if include_example_endpoint -%}
+{% if include_example_endpoint %}
     repositories.py      # Repository implementations
-{% endif -%}
+{% endif %}
   api/
     router.py           # Top-level composition: system{% if enable_azure_auth %}, auth{% endif %} and tasks routers{% if include_example_endpoint %}, plus items_router{% endif %}, wired into one `router`
-{% if include_example_endpoint -%}
+{% if include_example_endpoint %}
     items/
       router.py            # items_router (/items)
-{% endif -%}
+{% endif %}
   main.py                # Application entrypoint
   container.py            # ServiceContainer shape (no service imports at runtime)
   bootstrap.py            # Builds a ServiceContainer from Settings
@@ -88,16 +88,16 @@ tests/{{ package_name }}/
     test_services.py   # Service tests
   api/
     test_routes.py     # Route integration tests
-{% if enable_azure_auth -%}
+{% if enable_azure_auth %}
     test_auth.py         # /auth/me + /auth/admin tests via dependency overrides
-{% endif -%}
-{% if include_example_endpoint -%}
+{% endif %}
+{% if include_example_endpoint %}
     test_items.py       # Example /items endpoint tests
-{% endif -%}
+{% endif %}
   database/
-{% if include_example_endpoint -%}
+{% if include_example_endpoint %}
     test_repositories.py  # Repository tests against a real Postgres database
-{% endif -%}
+{% endif %}
     test_queues.py         # Queue adapter tests against a real Redis instance
 ```
 
