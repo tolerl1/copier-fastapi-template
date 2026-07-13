@@ -46,55 +46,82 @@ Built with `uv`, `prek`, Ruff, `pyright`, `pyupgrade`, async SQLAlchemy, Alembic
 
 ```text
 src/{{ package_name }}/
-  api/
-    models.py          # Domain models{% if include_example_endpoint %}: items, scope registry, task queues{% else %}: scope registry, task queues{% endif %}
-
-    schemas.py         # Request/response DTOs
-    services.py        # Application services
-    dependencies.py    # Dependency injection helpers (Annotated Dep aliases)
+  application/
+    models.py          # Cross-cutting domain models: scope registry, task queues
+    schemas.py         # Cross-cutting request/response DTOs
+    services.py        # Cross-cutting application services
+    dependencies.py    # Shared dependency injection helpers (Annotated Dep aliases)
+{% if include_example_endpoint %}
+    items/               # Everything item-domain-specific
+      models.py            # Item
+      schemas.py            # ItemDTO, PaginatedItemsDTO
+      services.py            # ItemService
+      dependencies.py         # get_item_service, ItemServiceDep
+{% endif %}
   core/
     config.py          # Configuration
     logging.py          # Structured logging
-{% if enable_telemetry -%}
+{% if enable_telemetry %}
     telemetry.py        # OpenTelemetry tracing
-{% endif -%}
-{% if enable_azure_auth -%}
+{% endif %}
+{% if enable_azure_auth %}
     auth.py              # azure_scheme JWT validation + require_role()
-{% endif -%}
+{% endif %}
   database/
     session.py          # SQLAlchemy session management and ORM models
     queues.py            # Queue backend adapters
-{% if include_example_endpoint -%}
+{% if include_example_endpoint %}
     repositories.py      # Repository implementations
-{% endif -%}
-  routes/
-    router.py           # Per-domain API routers (system{% if enable_azure_auth %}, auth{% endif %}{% if include_example_endpoint %}, items{% endif %}, tasks)
+{% endif %}
+  api/
+    router.py           # Top-level composition: system{% if enable_azure_auth %}, auth{% endif %} and tasks routers{% if include_example_endpoint %}, plus items_router{% endif %}, wired into one `router`
+{% if include_example_endpoint %}
+    items/
+      router.py            # items_router (/items)
+{% endif %}
   main.py                # Application entrypoint
   container.py            # ServiceContainer shape (no service imports at runtime)
   bootstrap.py            # Builds a ServiceContainer from Settings
 tests/{{ package_name }}/
-  api/
+  application/
     test_models.py     # Domain model tests
     test_services.py   # Service tests
+  api/
     test_routes.py     # Route integration tests
-{% if enable_azure_auth -%}
+{% if enable_azure_auth %}
     test_auth.py         # /auth/me + /auth/admin tests via dependency overrides
-{% endif -%}
-{% if include_example_endpoint -%}
+{% endif %}
+{% if include_example_endpoint %}
     test_items.py       # Example /items endpoint tests
-{% endif -%}
+{% endif %}
   database/
-{% if include_example_endpoint -%}
+{% if include_example_endpoint %}
     test_repositories.py  # Repository tests against a real Postgres database
-{% endif -%}
+{% endif %}
     test_queues.py         # Queue adapter tests against a real Redis instance
 ```
 
 `container.py` only defines the `ServiceContainer` dataclass (its field types
 are `TYPE_CHECKING`-only imports); `bootstrap.py` does the actual wiring and
 is the only module that imports the concrete services. Request-time code
-(`api/dependencies.py`) imports `container.py`, not `bootstrap.py`, so it
+(`application/dependencies.py`) imports `container.py`, not `bootstrap.py`, so it
 never pulls in the full service graph just to get the container's shape.
+
+{% if include_example_endpoint %}
+### Adding a new domain
+
+`items` is the template for grouping a growing domain's code together:
+production code for a domain gets its own `application/<domain>/` folder
+(models, schemas, services, dependencies) and its own `api/<domain>/router.py`,
+while `api/router.py` just imports each domain's router and composes them
+into one `router`. Cross-cutting things that don't belong to a single
+domain — `HealthService`, `TaskQueue`, `ScopeRegistry` — stay in the shared
+`application/` files instead of being forced into a domain folder. Not
+every route needs this treatment: a single-endpoint router (like `/health`
+or `/tasks/dispatch`) is fine defined directly in `api/router.py`; reach for
+a domain folder once there's enough model/schema/service/route code to be
+worth grouping.
+{% endif %}
 
 ## Quick start
 
@@ -231,7 +258,7 @@ Define scopes with JSON in `{{ env_prefix }}SCOPES`, for example:
 {% endif -%}
 - `/tasks/dispatch` queues long-running work to the configured queue backend.
 
-Routes are grouped into per-domain `APIRouter`s in `routes/router.py`
+Routes are grouped into per-domain `APIRouter`s in `api/router.py`
 (`system_router`{% if enable_azure_auth %}, `auth_router`{% endif %}{% if include_example_endpoint %}, `items_router`{% endif %}, `tasks_router`), each declaring its own
 `prefix`/`tags` rather than repeating them per route — follow the same
 pattern when adding new domains.
@@ -286,7 +313,7 @@ against Entra ID themselves and send the resulting access token as
 
 ### Using it
 
-- `CurrentUserDep` (in `api/dependencies.py`) resolves to a validated
+- `CurrentUserDep` (in `application/dependencies.py`) resolves to a validated
   `fastapi_azure_auth.user.User` for any endpoint requiring just "a logged-in
   caller" — see `GET /auth/me`.
 - `require_role("SomeRole")` (in `core/auth.py`) builds a dependency that

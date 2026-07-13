@@ -11,8 +11,8 @@ from fastapi_azure_auth.user import User
 {% endif %}
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from {{ package_name }}.api.models import UnknownScopeError
-from {{ package_name }}.api.services import HealthService, {% if include_example_endpoint %}ItemService, {% endif %}TaskDispatcher
+from {{ package_name }}.application.models import UnknownScopeError
+from {{ package_name }}.application.services import HealthService, TaskDispatcher
 {% if enable_azure_auth %}
 from {{ package_name }}.core.auth import get_current_user, require_admin_role
 {% endif %}
@@ -35,26 +35,6 @@ def get_health_service(container: ContainerDep) -> HealthService:
 HealthServiceDep = Annotated[HealthService, Depends(get_health_service)]
 
 
-{% if include_example_endpoint %}
-def get_item_service(container: ContainerDep) -> ItemService:
-    """Returns the item service.
-
-    This is a template dependency for demonstrating how to inject services.
-
-    Args:
-        container (ServiceContainer): Application service container.
-
-    Returns:
-        ItemService: Item service instance.
-    """
-
-    return container.item_service
-
-
-ItemServiceDep = Annotated[ItemService, Depends(get_item_service)]
-
-
-{% endif %}
 def get_task_dispatcher(container: ContainerDep) -> TaskDispatcher:
     """Returns the task dispatcher.
 

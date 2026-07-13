@@ -1,0 +1,20 @@
+"""Domain model for example items."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+
+@dataclass(frozen=True, slots=True)
+class Item:
+    """Describes an example persisted item.
+
+    Attributes:
+        id (str): Item identifier.
+        name (str): Item name.
+        description (str): Item description.
+    """
+
+    id: str
+    name: str
+    description: str

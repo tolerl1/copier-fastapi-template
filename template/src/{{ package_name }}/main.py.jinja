@@ -16,7 +16,7 @@ from {{ package_name }}.core.logging import configure_logging
 {% if enable_telemetry %}
 from {{ package_name }}.core.telemetry import configure_telemetry
 {% endif %}
-from {{ package_name }}.routes.router import router
+from {{ package_name }}.api.router import router
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:

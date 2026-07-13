@@ -1,0 +1,57 @@
+"""Application service for example items."""
+
+from __future__ import annotations
+
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from {{ package_name }}.application.items.schemas import ItemDTO, PaginatedItemsDTO
+from {{ package_name }}.database.repositories import SqlAlchemyItemRepository
+
+
+class ItemService:
+    """Example service for listing items.
+
+    This is a template service demonstrating how to back a paginated endpoint
+    with a repository and a request-scoped database session.
+
+    Attributes:
+        _repository (SqlAlchemyItemRepository): Item repository.
+    """
+
+    def __init__(self, repository: SqlAlchemyItemRepository) -> None:
+        """Creates the item service.
+
+        Args:
+            repository (SqlAlchemyItemRepository): Item repository.
+
+        Returns:
+            None: The service is initialized in-place.
+        """
+
+        self._repository = repository
+
+    async def page(
+        self, session: AsyncSession, page: int, page_size: int
+    ) -> PaginatedItemsDTO:
+        """Builds a paginated item response.
+
+        Args:
+            session (AsyncSession): Request-scoped database session.
+            page (int): One-based page number.
+            page_size (int): Requested page size.
+
+        Returns:
+            PaginatedItemsDTO: Paginated item response.
+        """
+
+        offset = (page - 1) * page_size
+        items = await self._repository.list_items(
+            session, offset=offset, limit=page_size
+        )
+        total = await self._repository.count_items(session)
+        return PaginatedItemsDTO(
+            items=[ItemDTO.from_item(item) for item in items],
+            page=page,
+            page_size=page_size,
+            total=total,
+        )

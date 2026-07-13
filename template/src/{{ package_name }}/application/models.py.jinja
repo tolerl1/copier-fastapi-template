@@ -1,4 +1,4 @@
-"""Domain models for scopes{% if include_example_endpoint %}, example items,{% endif %} and queued work."""
+"""Domain models for scopes and queued work."""
 
 from __future__ import annotations
 
@@ -10,23 +10,6 @@ from uuid import uuid4
 from pydantic import BaseModel, Field
 
 
-{% if include_example_endpoint %}
-@dataclass(frozen=True, slots=True)
-class Item:
-    """Describes an example persisted item.
-
-    Attributes:
-        id (str): Item identifier.
-        name (str): Item name.
-        description (str): Item description.
-    """
-
-    id: str
-    name: str
-    description: str
-
-
-{% endif %}
 @dataclass(frozen=True, slots=True)
 class ScopeDefinition:
     """Describes a bounded context.

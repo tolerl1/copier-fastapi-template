@@ -1,0 +1,28 @@
+"""Dependency injection helpers for example items."""
+
+from __future__ import annotations
+
+from typing import Annotated
+
+from fastapi import Depends
+
+from {{ package_name }}.application.items.services import ItemService
+from {{ package_name }}.container import ContainerDep
+
+
+def get_item_service(container: ContainerDep) -> ItemService:
+    """Returns the item service.
+
+    This is a template dependency for demonstrating how to inject services.
+
+    Args:
+        container (ServiceContainer): Application service container.
+
+    Returns:
+        ItemService: Item service instance.
+    """
+
+    return container.item_service
+
+
+ItemServiceDep = Annotated[ItemService, Depends(get_item_service)]

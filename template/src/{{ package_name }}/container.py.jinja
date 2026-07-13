@@ -1,10 +1,11 @@
 """The application service container's shape.
 
 Deliberately separate from `bootstrap.py`: this module only defines what a
-`ServiceContainer` looks like, so request-time code (`api/dependencies.py`)
-can depend on the type without pulling in the whole service graph that
-`bootstrap.build_container` wires up. Import `bootstrap` only where a
-container actually needs to be built (currently just `main.py`).
+`ServiceContainer` looks like, so request-time code
+(`application/dependencies.py`) can depend on the type without pulling in
+the whole service graph that `bootstrap.build_container` wires up. Import
+`bootstrap` only where a container actually needs to be built (currently
+just `main.py`).
 """
 
 from __future__ import annotations
@@ -15,14 +16,11 @@ from typing import TYPE_CHECKING, Annotated, TypedDict, cast
 from fastapi import Depends, Request
 
 if TYPE_CHECKING:
-    from {{ package_name }}.api.models import ScopeRegistry, TaskQueue
-    from {{ package_name }}.api.services import (
-        HealthService,
+    from {{ package_name }}.application.models import ScopeRegistry, TaskQueue
+    from {{ package_name }}.application.services import HealthService, TaskDispatcher
 {% if include_example_endpoint %}
-        ItemService,
+    from {{ package_name }}.application.items.services import ItemService
 {% endif %}
-        TaskDispatcher,
-    )
 {% if enable_azure_auth %}
     from fastapi_azure_auth import SingleTenantAzureAuthorizationCodeBearer
 
@@ -88,10 +86,10 @@ class ContainerState(TypedDict):
 def get_container(request: Request) -> ServiceContainer:
     """Returns the application container.
 
-    Defined here (rather than in `api/dependencies.py`) so modules that need
-    request-scoped access to the container — like `core/auth.py` — can
-    depend on it without importing from `api/dependencies.py` and creating a
-    circular import.
+    Defined here (rather than in `application/dependencies.py`) so modules
+    that need request-scoped access to the container — like `core/auth.py`
+    — can depend on it without importing from `application/dependencies.py`
+    and creating a circular import.
 
     Args:
         request (Request): Current request. Keep this unparameterized —

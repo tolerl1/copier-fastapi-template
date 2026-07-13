@@ -5,8 +5,8 @@ from __future__ import annotations
 import pytest
 from tests.conftest import TEST_DATABASE_URL
 
-from {{ package_name }}.api.models import UnknownScopeError
-from {{ package_name }}.api.schemas import DispatchTaskRequest
+from {{ package_name }}.application.models import UnknownScopeError
+from {{ package_name }}.application.schemas import DispatchTaskRequest
 from {{ package_name }}.bootstrap import build_container
 from {{ package_name }}.core.config import ScopeSettings, Settings
 
