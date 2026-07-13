@@ -45,3 +45,40 @@ class SqlAlchemyItemRepository:
         """
 
         return await session.scalar(select(func.count()).select_from(ItemModel)) or 0
+
+    async def list_items_with_total(
+        self, session: AsyncSession, offset: int, limit: int
+    ) -> tuple[tuple[Item, ...], int]:
+        """Lists a page of persisted items alongside the total row count.
+
+        Uses a single query with a `count(*) OVER()` window column instead of
+        a separate COUNT query, halving the round trips for the common case.
+        A window function only reports a count alongside returned rows, so an
+        empty page (e.g. a page number past the end) falls back to
+        `count_items` for the total.
+
+        Args:
+            session (AsyncSession): Active request-scoped session.
+            offset (int): Number of leading rows to skip.
+            limit (int): Maximum number of rows to return.
+
+        Returns:
+            tuple[tuple[Item, ...], int]: Page of items and the total row count.
+        """
+
+        total_column = func.count().over().label("total")
+        result = await session.execute(
+            select(ItemModel, total_column)
+            .order_by(ItemModel.id)
+            .offset(offset)
+            .limit(limit)
+        )
+        rows = result.all()
+        if not rows:
+            return (), await self.count_items(session)
+
+        items = tuple(
+            Item(id=str(model.id), name=model.name, description=model.description)
+            for model, _ in rows
+        )
+        return items, rows[0].total

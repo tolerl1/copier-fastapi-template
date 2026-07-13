@@ -54,6 +54,19 @@ def configure_telemetry(app: FastAPI, settings: Settings) -> None:
     if not settings.telemetry_enabled:
         return
 
+    # OpenTelemetry only honors the *first* `set_tracer_provider` call per
+    # process (later calls silently no-op with a warning) — building a new
+    # `TracerProvider` on every `configure_telemetry` call would leak its
+    # span processor (a `BatchSpanProcessor` spawns a background export
+    # thread that's never stopped) without ever actually becoming the active
+    # provider. Reuse the existing one if `configure_telemetry` already ran
+    # once in this process, e.g. across `main.py`'s module-level `app =
+    # create_app()` and the per-test apps built in `tests/conftest.py`.
+    existing_provider = trace.get_tracer_provider()
+    if isinstance(existing_provider, TracerProvider):
+        FastAPIInstrumentor.instrument_app(app, tracer_provider=existing_provider)
+        return
+
     provider = TracerProvider(
         resource=Resource.create(
             {
