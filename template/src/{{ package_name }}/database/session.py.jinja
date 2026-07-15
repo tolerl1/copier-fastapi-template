@@ -70,13 +70,15 @@ class UUIDPrimaryKeyMixin:
 
 
 {% if include_example_endpoint %}
-class ItemModel({% if use_uuid_primary_keys %}UUIDPrimaryKeyMixin, {% endif %}Base):
+class ItemModel({% if use_uuid_primary_keys %}UUIDPrimaryKeyMixin, {% endif %}TimestampMixin, Base):
     """Persists example items for the `/items` endpoint.
 
     Attributes:
         id ({% if use_uuid_primary_keys %}UUID{% else %}int{% endif %}): Database primary key.
         name (str): Item name.
         description (str): Item description.
+        created_at (datetime): Row creation timestamp, set by the database.
+        updated_at (datetime): Row last-update timestamp, set by the database.
     """
 
     __tablename__ = "items"

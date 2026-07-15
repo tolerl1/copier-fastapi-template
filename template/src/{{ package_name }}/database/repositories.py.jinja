@@ -30,7 +30,13 @@ class SqlAlchemyItemRepository:
             select(ItemModel).order_by(ItemModel.id).offset(offset).limit(limit)
         )
         return tuple(
-            Item(id=str(model.id), name=model.name, description=model.description)
+            Item(
+                id=str(model.id),
+                name=model.name,
+                description=model.description,
+                created_at=model.created_at,
+                updated_at=model.updated_at,
+            )
             for model in result
         )
 
@@ -78,7 +84,13 @@ class SqlAlchemyItemRepository:
             return (), await self.count_items(session)
 
         items = tuple(
-            Item(id=str(model.id), name=model.name, description=model.description)
+            Item(
+                id=str(model.id),
+                name=model.name,
+                description=model.description,
+                created_at=model.created_at,
+                updated_at=model.updated_at,
+            )
             for model, _ in rows
         )
         return items, rows[0].total
